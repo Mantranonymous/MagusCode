@@ -6,7 +6,7 @@ public struct GameStateSnapshot: Hashable, Codable, Sendable {
     public let timestamp: Date
     public let item: Item?
     public let history: [MageHistoryEntry]
-    public let sink: Sink?
+    public let reliquat: Reliquat?
     public let jobLevel: Int?
     public let jobName: String?
 
@@ -14,19 +14,19 @@ public struct GameStateSnapshot: Hashable, Codable, Sendable {
         timestamp: Date = Date(),
         item: Item? = nil,
         history: [MageHistoryEntry] = [],
-        sink: Sink? = nil,
+        reliquat: Reliquat? = nil,
         jobLevel: Int? = nil,
         jobName: String? = nil
     ) {
         self.timestamp = timestamp
         self.item = item
         self.history = history
-        self.sink = sink
+        self.reliquat = reliquat
         self.jobLevel = jobLevel
         self.jobName = jobName
     }
 
     public var hasItem: Bool { item != nil }
-    public var hasSink: Bool { sink != nil }
+    public var hasReliquat: Bool { reliquat?.hasCapacity == true }
     public var lastCombine: MageHistoryEntry? { history.last }
 }

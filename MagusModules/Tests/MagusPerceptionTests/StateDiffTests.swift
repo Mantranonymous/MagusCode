@@ -6,14 +6,14 @@ final class StateDiffTests: XCTestCase {
     private func snapshot(
         item: Item? = nil,
         history: [MageHistoryEntry] = [],
-        sink: Int? = nil,
+        reliquat: Double? = nil,
         jobLevel: Int? = nil
     ) -> GameStateSnapshot {
         GameStateSnapshot(
             timestamp: Date(),
             item: item,
             history: history,
-            sink: sink.map { Sink(percent: $0) },
+            reliquat: reliquat.map { Reliquat(density: $0) },
             jobLevel: jobLevel
         )
     }
@@ -27,7 +27,7 @@ final class StateDiffTests: XCTestCase {
 
     func testCombineLanded() {
         let s1 = snapshot(history: [])
-        let newEntry = MageHistoryEntry(result: .success, kind: .raRune, delta: 1)
+        let newEntry = MageHistoryEntry(result: .criticalSuccess, kind: .raRune, delta: 1)
         let s2 = snapshot(history: [newEntry])
         let diff = StateDiff(from: s1, to: s2)
         XCTAssertTrue(diff.hasChanges)
@@ -50,12 +50,12 @@ final class StateDiffTests: XCTestCase {
         XCTAssertEqual(statChanges.first?.1, 101)
     }
 
-    func testSinkChanged() {
-        let s1 = snapshot(sink: 50)
-        let s2 = snapshot(sink: 87)
+    func testReliquatChanged() {
+        let s1 = snapshot(reliquat: 0)
+        let s2 = snapshot(reliquat: 27)
         let diff = StateDiff(from: s1, to: s2)
-        let sinkChange = diff.changes.first { if case .sinkChanged = $0 { return true } else { return false } }
-        XCTAssertNotNil(sinkChange)
+        let change = diff.changes.first { if case .reliquatChanged = $0 { return true } else { return false } }
+        XCTAssertNotNil(change)
     }
 
     func testJobLeveledUp() {

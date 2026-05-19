@@ -17,12 +17,12 @@ public struct SnapshotBuilder: Sendable {
     public func build(from raw: RawOCRSnapshot) -> GameStateSnapshot {
         let statParser = StatLineParser(dictionary: dictionary)
         let historyParser = HistoryParser(dictionary: dictionary)
-        let sinkParser = SinkParser()
+        let reliquatParser = ReliquatParser()
         let jobParser = JobLevelParser()
 
         var stats: [Stat] = []
         var history: [MageHistoryEntry] = []
-        var sink: Sink? = nil
+        var reliquat: Reliquat? = nil
         var jobLevel: Int? = nil
         var jobName: String? = nil
 
@@ -32,8 +32,8 @@ public struct SnapshotBuilder: Sendable {
         if let historyText = raw.results[.history]?.joinedText {
             history = historyParser.parse(text: historyText)
         }
-        if let sinkText = raw.results[.sink]?.joinedText {
-            sink = sinkParser.parse(text: sinkText)
+        if let reliquatText = raw.results[.reliquat]?.joinedText {
+            reliquat = reliquatParser.parse(text: reliquatText)
         }
         if let jobText = raw.results[.jobLevel]?.joinedText {
             let out = jobParser.parse(text: jobText)
@@ -47,12 +47,12 @@ public struct SnapshotBuilder: Sendable {
             timestamp: raw.frameTimestamp,
             item: item,
             history: history,
-            sink: sink,
+            reliquat: reliquat,
             jobLevel: jobLevel,
             jobName: jobName
         )
 
-        logger.debug("Snapshot built: \(stats.count) stats, \(history.count) history, sink=\(String(describing: sink)), job=\(String(describing: jobLevel))")
+        logger.debug("Snapshot built: \(stats.count) stats, \(history.count) history, reliquat=\(String(describing: reliquat)), job=\(String(describing: jobLevel))")
         return snapshot
     }
 }

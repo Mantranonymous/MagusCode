@@ -10,6 +10,7 @@
 		4A0000000000000000000050 /* MagusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000020 /* MagusApp.swift */; };
 		4A0000000000000000000051 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000021 /* ContentView.swift */; };
 		4A000000000000000000005A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000026 /* AppState.swift */; };
+		4A000000000000000000005C /* ItemPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000027 /* ItemPickerSheet.swift */; };
 		4A0000000000000000000052 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000022 /* Assets.xcassets */; };
 		4A0000000000000000000053 /* MagusCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000090 /* MagusCommon */; };
 		4A0000000000000000000054 /* MagusCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000091 /* MagusCore */; };
@@ -29,6 +30,7 @@
 		4A0000000000000000000024 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4A0000000000000000000025 /* Magus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Magus.entitlements; sourceTree = "<group>"; };
 		4A0000000000000000000026 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		4A0000000000000000000027 /* ItemPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemPickerSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +66,7 @@
 				4A0000000000000000000020 /* MagusApp.swift */,
 				4A0000000000000000000021 /* ContentView.swift */,
 				4A0000000000000000000026 /* AppState.swift */,
+				4A0000000000000000000027 /* ItemPickerSheet.swift */,
 				4A0000000000000000000022 /* Assets.xcassets */,
 				4A0000000000000000000024 /* Info.plist */,
 				4A0000000000000000000025 /* Magus.entitlements */,
@@ -159,6 +162,7 @@
 				4A0000000000000000000050 /* MagusApp.swift in Sources */,
 				4A0000000000000000000051 /* ContentView.swift in Sources */,
 				4A000000000000000000005A /* AppState.swift in Sources */,
+				4A000000000000000000005C /* ItemPickerSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

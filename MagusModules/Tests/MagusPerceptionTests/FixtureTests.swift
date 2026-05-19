@@ -70,12 +70,16 @@ final class FixtureTests: XCTestCase {
             return
         }
 
-        // Sink check
-        if let expectedSink = expected["sink"] as? Int,
-           let sinkText = (regions["sink"]?["text"]) as? String {
-            let parsed = SinkParser().parse(text: sinkText)
-            XCTAssertEqual(parsed?.percent, expectedSink,
-                           "Fixture \(dir.lastPathComponent) : sink mismatch (parsed=\(parsed?.percent ?? -1) attendu=\(expectedSink))")
+        // Reliquat check (accepte Int ou Double)
+        let expectedReliquat: Double?
+        if let d = expected["reliquat"] as? Double { expectedReliquat = d }
+        else if let i = expected["reliquat"] as? Int { expectedReliquat = Double(i) }
+        else { expectedReliquat = nil }
+        if let expected = expectedReliquat,
+           let reliquatText = (regions["reliquat"]?["text"]) as? String {
+            let parsed = ReliquatParser().parse(text: reliquatText)
+            XCTAssertEqual(parsed?.density ?? -1, expected, accuracy: 0.01,
+                           "Fixture \(dir.lastPathComponent) : reliquat mismatch")
         }
 
         // Job level check

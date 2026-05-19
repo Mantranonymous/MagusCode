@@ -1,4 +1,5 @@
 import MagusCore
+import MagusPersistence
 import MagusPerception
 import MagusReferenceData
 import MagusUI
@@ -93,6 +94,7 @@ private struct HomeView: View {
                 referenceCard
                 dofusCard
                 profilesCard
+                itemPickerCard
                 if let profile = appState.savedProfiles.first(where: { $0.isComplete }) {
                     ocrTestCard(profile: profile)
                 }
@@ -305,6 +307,108 @@ private struct HomeView: View {
         }
     }
 
+    @State private var showItemPicker = false
+
+    private var itemPickerCard: some View {
+        Card(title: "Item à mager") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                if let item = appState.selectedItem {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("Niveau \(item.level)" + (item.typeName.map { " · \($0)" } ?? "") + (item.metier.map { " · \($0.displayName)" } ?? ""))
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        MagusButton("Changer", icon: "arrow.triangle.2.circlepath", style: .secondary) {
+                            showItemPicker = true
+                        }
+                        MagusButton("", icon: "xmark", style: .ghost) {
+                            appState.clearSelectedItem()
+                        }
+                    }
+
+                    Divider().background(Theme.Colors.border)
+
+                    let mageable = item.stats.filter(\.isMageable)
+                    let fixed = item.stats.filter { !$0.isMageable }
+
+                    if !mageable.isEmpty {
+                        Text("Stats mageables")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .textCase(.uppercase)
+                        ForEach(mageable, id: \.kind) { spec in
+                            itemSpecStatRow(spec: spec, isFixed: false)
+                        }
+                    }
+
+                    if !fixed.isEmpty {
+                        Divider().background(Theme.Colors.border)
+                        Text("Stats fixes (non mageables)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .textCase(.uppercase)
+                        ForEach(fixed, id: \.kind) { spec in
+                            itemSpecStatRow(spec: spec, isFixed: true)
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text("Aucun item sélectionné. Choisis l'item posé sur l'établi pour activer la stratégie DofusDB.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Spacer()
+                        MagusButton("Choisir un item", icon: "magnifyingglass", style: .primary) {
+                            showItemPicker = true
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showItemPicker) {
+            ItemPickerSheet(appState: appState, isPresented: $showItemPicker)
+        }
+    }
+
+    private func itemSpecStatRow(spec: StatSpec, isFixed: Bool) -> some View {
+        let currentValue: Int? = appState.lastParsedSnapshot?.item?.stat(matching: spec.kind)?.value
+        let displayName = appState.displayName(for: spec.kind)
+        let primaryColor = isFixed ? Theme.Colors.textSecondary : Theme.Colors.textPrimary
+
+        return HStack(spacing: Theme.Spacing.md) {
+            Text(displayName)
+                .font(.system(size: 12, weight: isFixed ? .regular : .medium))
+                .foregroundStyle(primaryColor)
+                .frame(width: 200, alignment: .leading)
+
+            if let v = currentValue {
+                let atMax = v >= spec.maxValue
+                Text("\(v)")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(atMax ? Theme.Colors.gold : (isFixed ? Theme.Colors.textSecondary : Theme.Colors.accent))
+                    .frame(width: 50, alignment: .trailing)
+            } else {
+                Text("—")
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(width: 50, alignment: .trailing)
+            }
+
+            Text(isFixed ? "(fixe \(spec.minValue))" : "(\(spec.minValue) - \(spec.maxValue))")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .frame(width: 90, alignment: .leading)
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
+        .opacity(isFixed ? 0.75 : 1.0)
+    }
+
     private func ocrTestCard(profile: ResolutionProfile) -> some View {
         Card(title: "État détecté — \(profile.name)") {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -352,27 +456,44 @@ private struct HomeView: View {
                     Divider().background(Theme.Colors.border)
                     stateDiffView(diff)
                 }
+
+                if let raw = appState.lastOCRSnapshot {
+                    Divider().background(Theme.Colors.border)
+                    rawOCRDebugView(raw)
+                }
             }
         }
     }
 
     private func parsedSnapshotView(_ snapshot: GameStateSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            // Top row : sink + job + history count
+        let hasItemSelected = appState.selectedItem != nil
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            // Top row : reliquat + métier + history + stats
             HStack(spacing: Theme.Spacing.lg) {
-                metricChip(label: "Sink", value: snapshot.sink.map { "\($0.percent)%" } ?? "—")
+                metricChip(label: "Reliquat", value: snapshot.reliquat.map { $0.formatted } ?? "—")
                 metricChip(label: "Métier", value: snapshot.jobLevel.map { "\($0)" } ?? "—")
                 metricChip(label: "Historique", value: "\(snapshot.history.count)")
-                metricChip(label: "Stats", value: "\(snapshot.item?.stats.count ?? 0)")
+                metricChip(label: "Stats OCR", value: "\(snapshot.item?.stats.count ?? 0)")
             }
 
-            // Stats parsées
-            if let stats = snapshot.item?.stats, !stats.isEmpty {
+            // Stats parsées — UNIQUEMENT si pas d'item sélectionné (sinon c'est affiché dans Item à mager)
+            if !hasItemSelected, let stats = snapshot.item?.stats, !stats.isEmpty {
+                Text("Stats brutes parsées")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .textCase(.uppercase)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
                         statRow(stat: stat)
                     }
                 }
+            }
+
+            if hasItemSelected {
+                Text("Stats de l'item visibles dans la carte « Item à mager »")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .italic()
             }
 
             // History
@@ -423,6 +544,7 @@ private struct HomeView: View {
                 Text("(\(min) - \(max))")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(width: 90, alignment: .leading)
                 if let progress = stat.rangeProgress {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -438,8 +560,36 @@ private struct HomeView: View {
             } else {
                 Spacer()
             }
+
+            // Rune availability (Pa / Ra counts)
+            if let av = stat.availability {
+                HStack(spacing: 4) {
+                    if av.paCount > 0 {
+                        runeBadge(label: "Pa", count: av.paCount)
+                    }
+                    if av.raCount > 0 {
+                        runeBadge(label: "Ra", count: av.raCount)
+                    }
+                }
+                .frame(width: 120, alignment: .trailing)
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private func runeBadge(label: String, count: Int) -> some View {
+        HStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Theme.Colors.surfaceElev)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     private func historyRow(_ h: MageHistoryEntry) -> some View {
@@ -466,9 +616,9 @@ private struct HomeView: View {
 
     private func historyColor(_ result: MageHistoryEntry.Result) -> Color {
         switch result {
-        case .success: return Theme.Colors.success
-        case .failure: return Theme.Colors.danger
-        case .neutral: return Theme.Colors.textSecondary
+        case .criticalSuccess: return Theme.Colors.success
+        case .criticalFail: return Theme.Colors.danger
+        case .neutralSuccess: return Theme.Colors.warning
         case .unknown: return Theme.Colors.textTertiary
         }
     }
@@ -487,14 +637,56 @@ private struct HomeView: View {
         }
     }
 
+    @State private var debugExpanded = false
+
+    private func rawOCRDebugView(_ raw: RawOCRSnapshot) -> some View {
+        DisclosureGroup(isExpanded: $debugExpanded) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                ForEach(Array(raw.results.keys.sorted(by: { $0.rawValue < $1.rawValue })), id: \.self) { kind in
+                    if let r = raw.results[kind] {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(kind.shortName)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Spacer()
+                                Text("\(String(format: "%.0f", r.elapsedMs)) ms · conf \(String(format: "%.2f", r.averageConfidence))")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                            }
+                            Text(r.joinedText.isEmpty ? "(vide)" : r.joinedText)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .textSelection(.enabled)
+                                .padding(Theme.Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Theme.Colors.surfaceElev)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                        }
+                    }
+                }
+            }
+            .padding(.top, Theme.Spacing.sm)
+        } label: {
+            HStack {
+                Text("OCR brut (debug)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .textCase(.uppercase)
+                Spacer()
+            }
+        }
+        .tint(Theme.Colors.textSecondary)
+    }
+
     private func describeChange(_ change: StateDiff.Change) -> String {
         switch change {
         case .itemSwapped: return "→ item changé"
         case .combineLanded(let entries): return "→ combine landed (\(entries.count) entrées)"
         case .statChanged(let kind, let old, let new):
             return "→ \(appState.displayName(for: kind)) : \(old) → \(new)"
-        case .sinkChanged(let old, let new):
-            return "→ sink : \(old)% → \(new)%"
+        case .reliquatChanged(let old, let new):
+            return "→ reliquat : \(String(format: "%.1f", old)) → \(String(format: "%.1f", new))"
         case .jobLeveledUp(let old, let new):
             return "→ métier : niveau \(old) → \(new)"
         }

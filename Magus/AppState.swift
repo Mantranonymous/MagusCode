@@ -55,6 +55,11 @@ public final class AppState {
     // Fixture capture
     public var lastFixturePath: URL?
 
+    // Item selection (DofusDB)
+    public var selectedItem: ItemSpec?
+    public var itemSearchResults: [RefItem] = []
+    public var isSearchingItems = false
+
     // DofusDB sync
     public var syncProgress: SyncProgress = SyncProgress(stage: .idle)
     public var lastSyncAt: Date?
@@ -106,9 +111,57 @@ public final class AppState {
         }
     }
 
-    /// Helper UI : résout le nom FR d'une stat depuis le cache.
+    /// Helper UI : résout le nom FR d'une stat depuis le cache, en l'embellissant
+    /// pour les cas où DofusDB stocke un nom ambigu (ex: "Terre" = dommage Terre).
     public func displayName(for kind: StatKind) -> String {
-        characteristicsByID[kind.characteristicId]?.nameFR ?? "#\(kind.characteristicId)"
+        let raw = characteristicsByID[kind.characteristicId]?.nameFR ?? "#\(kind.characteristicId)"
+        switch kind.characteristicId {
+        case 88, 89, 90, 91, 92:
+            // Dommages élémentaires : DofusDB stocke "Terre" mais l'UI Dofus dit "Dommage Terre"
+            return "Dommage \(raw)"
+        case 33, 34, 35, 36, 37:
+            // Résistances en % : "Terre (%)" → "Résistance Terre %"
+            let cleaned = raw.replacingOccurrences(of: "(%)", with: "").trimmingCharacters(in: .whitespaces)
+            return "Résistance \(cleaned) %"
+        case 54, 55, 56, 57, 58:
+            // Résistances fixes : "Terre (fixe)" → "Résistance Terre"
+            let cleaned = raw.replacingOccurrences(of: "(fixe)", with: "").trimmingCharacters(in: .whitespaces)
+            return "Résistance \(cleaned)"
+        default:
+            return raw
+        }
+    }
+
+    // MARK: - Item selection
+
+    public func searchItems(query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else {
+            itemSearchResults = []
+            return
+        }
+        isSearchingItems = true
+        do {
+            itemSearchResults = try referenceRepository.searchItems(query: trimmed, limit: 30)
+        } catch {
+            logger.error("Item search failed: \(error.localizedDescription, privacy: .public)")
+            itemSearchResults = []
+        }
+        isSearchingItems = false
+    }
+
+    public func selectItem(id: Int) {
+        do {
+            selectedItem = try referenceRepository.itemSpec(id: id)
+            itemSearchResults = []
+            logger.info("Item selected: \(self.selectedItem?.name ?? "?", privacy: .public)")
+        } catch {
+            logger.error("Item select failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func clearSelectedItem() {
+        selectedItem = nil
     }
 
     public func checkAndSyncReference() async {
@@ -254,6 +307,7 @@ public final class AppState {
     }
 
     /// Capture une nouvelle frame de Dofus et fait tourner l'OCR pipeline puis les parsers.
+    /// Si un item est sélectionné, filtre les stats parsées au spec et enrichit via SpecGuidedExtractor.
     public func runOCRTest(profile: ResolutionProfile) async {
         guard let window = detectedWindow else { return }
         isRunningOCR = true
@@ -266,7 +320,35 @@ public final class AppState {
                 let raw = await pipeline.recognize(frame: frame, profile: profile)
                 let dict = await buildStatDictionary()
                 let builder = SnapshotBuilder(dictionary: dict)
-                let parsed = builder.build(from: raw)
+                var parsed = builder.build(from: raw)
+
+                // Filtrage + enrichissement via ItemSpec
+                if let spec = selectedItem {
+                    let allowedKinds = Set(spec.stats.map(\.kind))
+                    let filtered = (parsed.item?.stats ?? []).filter { allowedKinds.contains($0.kind) }
+                    let statsText = raw.results[.stats]?.joinedText ?? ""
+                    let extractor = SpecGuidedExtractor(dictionary: dict)
+                    let enriched = extractor.enrich(parsed: filtered, with: spec, ocrText: statsText)
+
+                    let newItem = Item(
+                        id: parsed.item?.id ?? UUID(),
+                        referenceItemId: spec.id,
+                        name: spec.name,
+                        level: spec.level,
+                        typeId: spec.typeId,
+                        stats: enriched,
+                        exos: parsed.item?.exos ?? []
+                    )
+                    parsed = GameStateSnapshot(
+                        timestamp: parsed.timestamp,
+                        item: newItem,
+                        history: parsed.history,
+                        reliquat: parsed.reliquat,
+                        jobLevel: parsed.jobLevel,
+                        jobName: parsed.jobName
+                    )
+                }
+
                 let previous = lastParsedSnapshot
                 let diff = previous.map { StateDiff(from: $0, to: parsed) }
 
@@ -276,7 +358,7 @@ public final class AppState {
                     self.lastStateDiff = diff
                 }
                 await screenCapture.stop()
-                logger.info("OCR+parse done in \(raw.totalElapsedMs)ms — \(parsed.item?.stats.count ?? 0) stats parsées")
+                logger.info("OCR+parse done in \(raw.totalElapsedMs)ms — \(parsed.item?.stats.count ?? 0) stats")
                 return
             }
         } catch {
@@ -385,7 +467,7 @@ public final class AppState {
                     ] as [String: Any]
                 } ?? []
             ],
-            "sink": parsed.sink?.percent as Any,
+            "reliquat": parsed.reliquat?.density as Any,
             "jobLevel": parsed.jobLevel as Any,
             "jobName": parsed.jobName as Any,
             "historyCount": parsed.history.count

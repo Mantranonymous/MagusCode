@@ -4,10 +4,22 @@ import Foundation
 public struct MageHistoryEntry: Hashable, Codable, Sendable, Identifiable {
 
     public enum Result: String, Codable, Sendable {
-        case success     // combine réussi
-        case failure     // combine raté (sink ou stat perdue)
-        case neutral     // landed mais pas de gain (rare)
+        /// SC — Succès Critique : la rune passe sans contrepartie.
+        case criticalSuccess
+        /// SN — Succès Neutre : la rune passe mais retire son poids ailleurs.
+        case neutralSuccess
+        /// EC — Échec Critique : la rune échoue ET retire son poids.
+        case criticalFail
         case unknown
+
+        public var shortLabel: String {
+            switch self {
+            case .criticalSuccess: return "SC"
+            case .neutralSuccess: return "SN"
+            case .criticalFail: return "EC"
+            case .unknown: return "?"
+            }
+        }
     }
 
     public enum CombineKind: String, Codable, Sendable {

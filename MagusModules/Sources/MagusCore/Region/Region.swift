@@ -17,14 +17,14 @@ public struct Region: Codable, Hashable, Identifiable, Sendable {
 public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
     case stats
     case history
-    case sink
+    case reliquat
     case runeInventory
     case jobLevel
     case xpBar
 
     public var dataType: RegionDataType {
         switch self {
-        case .stats, .history, .sink, .jobLevel:
+        case .stats, .history, .reliquat, .jobLevel:
             return .text
         case .runeInventory, .xpBar:
             return .visual
@@ -35,7 +35,7 @@ public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
         switch self {
         case .stats: return "Stats de l'item"
         case .history: return "Historique des combines"
-        case .sink: return "Pourcentage Sink"
+        case .reliquat: return "Reliquat (puits)"
         case .runeInventory: return "Inventaire des runes"
         case .jobLevel: return "Niveau métier"
         case .xpBar: return "Barre d'expérience"
@@ -46,7 +46,7 @@ public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
         switch self {
         case .stats: return "Stats"
         case .history: return "Historique"
-        case .sink: return "Sink"
+        case .reliquat: return "Reliquat"
         case .runeInventory: return "Runes"
         case .jobLevel: return "Niveau"
         case .xpBar: return "XP"

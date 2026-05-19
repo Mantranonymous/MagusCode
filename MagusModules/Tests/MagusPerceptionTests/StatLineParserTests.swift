@@ -88,6 +88,54 @@ final class StatLineParserTests: XCTestCase {
         XCTAssertEqual(stats[2].kind.characteristicId, 1)
     }
 
+    // MARK: - Format colonnes Dofus 3
+
+    func testParseDofus3ColumnsRaOnly() {
+        // Format réel observé : "151 200 208 Vitalité 238"
+        let parser = StatLineParser(dictionary: makeDictionary())
+        let stat = parser.parse(line: "151 200 208 Vitalité 238")
+        XCTAssertNotNil(stat)
+        XCTAssertEqual(stat?.value, 208)
+        XCTAssertEqual(stat?.minValue, 151)
+        XCTAssertEqual(stat?.maxValue, 200)
+        XCTAssertEqual(stat?.kind.characteristicId, 11)
+        XCTAssertEqual(stat?.availability?.raCount, 238)
+        XCTAssertEqual(stat?.availability?.paCount, 0)
+    }
+
+    func testParseDofus3ColumnsPaAndRa() {
+        // "26 35 35 Intelligence 152 41"
+        let parser = StatLineParser(dictionary: makeDictionary())
+        let stat = parser.parse(line: "26 35 35 Intelligence 152 41")
+        XCTAssertNotNil(stat)
+        XCTAssertEqual(stat?.value, 35)
+        XCTAssertEqual(stat?.minValue, 26)
+        XCTAssertEqual(stat?.maxValue, 35)
+        XCTAssertEqual(stat?.kind.characteristicId, 13)
+        XCTAssertEqual(stat?.availability?.paCount, 152)
+        XCTAssertEqual(stat?.availability?.raCount, 41)
+        XCTAssertTrue(stat?.isAtMax ?? false)
+    }
+
+    func testParseDofus3ColumnsFullTriple() {
+        // "26 35 34 Chance 224 8 1101"
+        let parser = StatLineParser(dictionary: makeDictionary())
+        let stat = parser.parse(line: "26 35 34 Chance 224 8 1101")
+        XCTAssertNotNil(stat)
+        XCTAssertEqual(stat?.value, 34)
+        XCTAssertEqual(stat?.kind.characteristicId, 14)
+        XCTAssertEqual(stat?.availability?.baseCount, 224)
+        XCTAssertEqual(stat?.availability?.paCount, 8)
+        XCTAssertEqual(stat?.availability?.raCount, 1101)
+    }
+
+    func testParseDofus3ColumnsRejectIfMinGreaterThanMax() {
+        let parser = StatLineParser(dictionary: makeDictionary())
+        // Si min > max, c'est probablement une mauvaise lecture
+        let stat = parser.parse(line: "200 150 180 Vitalité 0")
+        XCTAssertNil(stat)
+    }
+
     func testRejectInvalidLine() {
         let parser = StatLineParser(dictionary: makeDictionary())
         XCTAssertNil(parser.parse(line: ""))

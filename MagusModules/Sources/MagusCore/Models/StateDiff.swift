@@ -8,7 +8,7 @@ public struct StateDiff: Sendable, Hashable {
         case itemSwapped(from: Item?, to: Item?)
         case combineLanded(newEntries: [MageHistoryEntry])
         case statChanged(kind: StatKind, oldValue: Int, newValue: Int)
-        case sinkChanged(old: Int, new: Int)
+        case reliquatChanged(old: Double, new: Double)
         case jobLeveledUp(from: Int, to: Int)
     }
 
@@ -63,9 +63,9 @@ public struct StateDiff: Sendable, Hashable {
             }
         }
 
-        // Sink
-        if let oldS = from.sink?.percent, let newS = to.sink?.percent, oldS != newS {
-            changes.append(.sinkChanged(old: oldS, new: newS))
+        // Reliquat
+        if let oldR = from.reliquat?.density, let newR = to.reliquat?.density, oldR != newR {
+            changes.append(.reliquatChanged(old: oldR, new: newR))
         }
 
         // Job level

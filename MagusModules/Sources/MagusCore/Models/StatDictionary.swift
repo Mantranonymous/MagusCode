@@ -17,8 +17,11 @@ public struct StatDictionary: Sendable {
     private let entries: [Entry]                // pour fuzzy
 
     /// Aliases manuels (forme courte FR → nom canonique DofusDB).
-    /// Ces alias couvrent les écrits courts qu'on voit en jeu (ex: "PA", "Vita").
+    /// Couvre :
+    /// - les écrits courts qu'on voit en jeu (ex: "PA", "Vita")
+    /// - les libellés UI Dofus 3 vs noms DofusDB (ex: "Résistance Neutre" → "Neutre (%)")
     public static let defaultAliases: [String: String] = [
+        // Stats principales (formes courtes)
         "vita": "vitalité",
         "vit": "vitalité",
         "pv": "points de vie",
@@ -32,13 +35,42 @@ public struct StatDictionary: Sendable {
         "ch": "chance",
         "ag": "agilité",
         "pui": "puissance",
-        "dommages": "dommages",
         "dom": "dommages",
-        "crit": "critiques",
+        "crit": "critique",
         "cc": "coups critiques",
-        "soins": "soins",
-        "tacle": "tacle",
-        "fuite": "fuite",
+
+        // Résistances en % (avec "%" dans la ligne OCR)
+        "résistance neutre %": "Neutre (%)",
+        "résistance terre %": "Terre (%)",
+        "résistance feu %": "Feu (%)",
+        "résistance eau %": "Eau (%)",
+        "résistance air %": "Air (%)",
+
+        // Résistances fixes (sans "%" dans la ligne OCR)
+        "résistance neutre": "Neutre (fixe)",
+        "résistance terre": "Terre (fixe)",
+        "résistance feu": "Feu (fixe)",
+        "résistance eau": "Eau (fixe)",
+        "résistance air": "Air (fixe)",
+
+        // Avec le % devant (pas standard mais possible)
+        "% résistance neutre": "Neutre (%)",
+        "% résistance terre": "Terre (%)",
+        "% résistance feu": "Feu (%)",
+        "% résistance eau": "Eau (%)",
+        "% résistance air": "Air (%)",
+
+        // Dommages élémentaires (DofusDB stocke "Terre"/"Feu"/"Eau"/"Air"/"Neutre" pour les dommages)
+        "dommage terre": "Terre",
+        "dommage feu": "Feu",
+        "dommage eau": "Eau",
+        "dommage air": "Air",
+        "dommage neutre": "Neutre",
+        "dommages terre": "Terre",
+        "dommages feu": "Feu",
+        "dommages eau": "Eau",
+        "dommages air": "Air",
+        "dommages neutre": "Neutre",
     ]
 
     public init(referenceEntries: [(kind: StatKind, displayName: String)], aliases: [String: String] = defaultAliases) {
@@ -95,6 +127,8 @@ public struct StatDictionary: Sendable {
     static func normalize(_ s: String) -> String {
         let lower = s.lowercased()
         let folded = lower.folding(options: .diacriticInsensitive, locale: .current)
+        // ATTENTION : on conserve "%", "(", ")" pour distinguer "Force" vs "Force %"
+        // (DofusDB a les deux : id 10 "Force" et id 127 "Force %").
         return folded
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "-", with: "")

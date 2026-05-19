@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import MagusCommon
+import MagusCore
 import MagusPersistence
 import os
 
@@ -29,7 +30,7 @@ public struct RefEffect: Hashable, Sendable {
     public let boost: Bool
 }
 
-public struct RefItem: Hashable, Sendable {
+public struct RefItem: Hashable, Sendable, Identifiable {
     public let id: Int
     public let typeId: Int?
     public let level: Int?
@@ -186,6 +187,86 @@ public struct ReferenceRepository: Sendable {
         try dbQueue.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM ref_items") ?? 0
         }
+    }
+
+    /// Recherche d'items par nom (LIKE %query%). Triés par niveau DESC.
+    public func searchItems(query: String, limit: Int = 30) throws -> [RefItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return try dbQueue.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM ref_items
+                WHERE LOWER(name_fr) LIKE LOWER(?)
+                ORDER BY level DESC, name_fr ASC
+                LIMIT ?
+                """,
+                arguments: ["%\(trimmed)%", limit]
+            ).map(rowToItem)
+        }
+    }
+
+    /// Récupère un ItemSpec complet (item + ses possibleEffects résolus).
+    public func itemSpec(id: Int) throws -> ItemSpec? {
+        try dbQueue.read { db in
+            guard let itemRow = try Row.fetchOne(db, sql: "SELECT * FROM ref_items WHERE id = ?", arguments: [id]) else {
+                return nil
+            }
+            let item = rowToItem(itemRow)
+            let typeName: String? = item.typeId.flatMap { tid in
+                try? String.fetchOne(db, sql: "SELECT name_fr FROM ref_item_types WHERE id = ?", arguments: [tid])
+            }
+            let stats = try fetchStatSpecs(itemId: id, db: db)
+            return ItemSpec(
+                id: item.id,
+                name: item.nameFR ?? "?",
+                level: item.level ?? 0,
+                typeId: item.typeId,
+                typeName: typeName,
+                stats: stats
+            )
+        }
+    }
+
+    private func fetchStatSpecs(itemId: Int, db: Database) throws -> [StatSpec] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT ie.order_idx, ie.dice_num, ie.dice_side,
+                   c.id AS char_id, c.name_fr AS char_name
+            FROM ref_item_effects ie
+            JOIN ref_effects e ON e.id = ie.effect_id
+            JOIN ref_characteristics c ON c.id = e.characteristic_id
+            WHERE ie.item_id = ?
+            ORDER BY ie.order_idx
+            """,
+            arguments: [itemId]
+        )
+        var seen: Set<Int> = []
+        var specs: [StatSpec] = []
+        for row in rows {
+            guard
+                let charId: Int = row["char_id"],
+                let name: String = row["char_name"]
+            else { continue }
+            // Dédoublonne par caractéristique (un effet peut référencer plusieurs fois la même stat)
+            guard !seen.contains(charId) else { continue }
+            seen.insert(charId)
+            let order: Int = row["order_idx"]
+            let diceNumD: Double? = row["dice_num"]
+            let diceSideD: Double? = row["dice_side"]
+            let minV = Int(diceNumD ?? 0)
+            let maxV = Int(diceSideD ?? 0)
+            specs.append(StatSpec(
+                kind: StatKind(characteristicId: charId),
+                displayName: name,
+                minValue: minV,
+                maxValue: maxV,
+                order: order
+            ))
+        }
+        return specs
     }
 
     public func item(matchingFRName name: String) throws -> RefItem? {

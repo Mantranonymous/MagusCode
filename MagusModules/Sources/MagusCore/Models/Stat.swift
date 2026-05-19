@@ -1,17 +1,41 @@
 import Foundation
 
-/// Une stat lue sur un item : type, valeur courante, et range (min-max) éventuelle.
+/// Compteur de runes disponibles dans l'inventaire pour une stat donnée,
+/// tel que lu dans les colonnes Pa/Ra de la stats table Dofus 3.
+public struct StatRuneAvailability: Hashable, Codable, Sendable {
+    public let baseCount: Int    // colonne "Modif." (souvent vide en pratique)
+    public let paCount: Int
+    public let raCount: Int
+
+    public init(baseCount: Int = 0, paCount: Int = 0, raCount: Int = 0) {
+        self.baseCount = baseCount
+        self.paCount = paCount
+        self.raCount = raCount
+    }
+
+    public var hasAny: Bool { baseCount > 0 || paCount > 0 || raCount > 0 }
+}
+
+/// Une stat lue sur un item : type, valeur courante, range, et runes dispos.
 public struct Stat: Hashable, Codable, Sendable {
     public let kind: StatKind
     public let value: Int
     public let minValue: Int?
     public let maxValue: Int?
+    public let availability: StatRuneAvailability?
 
-    public init(kind: StatKind, value: Int, minValue: Int? = nil, maxValue: Int? = nil) {
+    public init(
+        kind: StatKind,
+        value: Int,
+        minValue: Int? = nil,
+        maxValue: Int? = nil,
+        availability: StatRuneAvailability? = nil
+    ) {
         self.kind = kind
         self.value = value
         self.minValue = minValue
         self.maxValue = maxValue
+        self.availability = availability
     }
 
     public var distanceToMax: Int? {

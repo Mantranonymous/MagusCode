@@ -42,7 +42,7 @@ Règle de dépendance : `UI → Core` uniquement. `Perception` et `Decision` ne 
 
 - [x] **Phase 0** — Foundations ✅ (2026-05-19)
 - [x] **Phase 1** — Capture & OCR Pipeline ✅ (2026-05-19)
-- [ ] **Phase 2** — Domain Model & Parsing
+- [x] **Phase 2** — Domain Model & Parsing ✅ (2026-05-19)
 - [ ] **Phase 3** — Decision Engine
 - [ ] **Phase 4** — UI Foundation & Design System
 - [ ] **Phase 5** — Modes Implementation (UI)
@@ -112,7 +112,12 @@ xcodebuild -scheme Magus -configuration Debug build
 - **Phase 1 (2026-05-19)** : Capture + OCR opérationnels. PermissionManager + WindowFinder + ScreenCapture (SCK) + RegionRepository (GRDB) + Theme + CalibrationView (stylisée, drag-to-draw) + OCRPipeline (Vision, TaskGroup parallèle) + AppState wire-up. Dofus 3 (Unity) ciblé via `com.Ankama.Dofus`.
 - **Décision RegionKind** : 4 régions texte (Stats, Historique, Sink, Niveau métier) + 2 régions visuelles (RuneInventory, BarreXP). Les visuelles seront traitées par analyseur pixel en P2/P3, pas OCR. `OCRPipeline` filtre déjà via `kind.dataType == .text`.
 - **À faire en P2** : intégrer DofusDB (module `MagusReferenceData`, cache SQLite local + refresh hebdo) + parsers (stats/sink/jobLevel/history) + `GameStateSnapshot` + `StateDiff` + corrections OCR robustes.
+- **Phase 2 (2026-05-19)** : Nouveau module `MagusReferenceData` (DofusDB client + sync + cache). Domain models complets (Item, Stat, Rune, Pute, Sink, History, GameStateSnapshot, StatDictionary, StateDiff). Parsers OCR (Stats/Sink/JobLevel/History) + corrections caractères. 40 unit tests verts. Bouton "Capturer fixture" pour collecte facile.
+- **Phase 2.5 prévue avant P3** : ajustements domain après lecture du guide FM Dofus 3 (voir mémoire `forgemagie-domain`) — corriger `Rune.Power` (base/pa/ra), ajouter `Métier` (6 métiers FM), `Reliquat`, `ItemProfile` (Concessions/Puits/Brisages), `OverInfo`, renommer Result en SC/SN/EC. Ajouter `.reliquat` à RegionKind (région texte calibrable, Dofus 3 affiche le reliquat dans l'UI).
+- **Phase 2.5 (2026-05-19)** : Corrections domain post-guide FM appliquées. Rune.Power (base/pa/ra avec densités 1/3/10), Métier enum (6 métiers + mapping itemTypeId), Reliquat (Double car valeurs décimales type 2.2), ItemProfile (Concessions/Puits/Brisages), OverInfo (cap 101). MageHistoryEntry.Result renommé criticalSuccess/neutralSuccess/criticalFail. Sink supprimé (n'existe pas en Dofus 3, c'était Puits=Reliquat). Region.reliquat ajoutée + ReliquatParser. Fix calibration UX (offset drag + resize handles + move via drag intérieur).
+- **Phase 2.6 (2026-05-19)** : Identification item via DofusDB. ItemSpec + StatSpec, ReferenceRepository.searchItems + itemSpec (join items × item_effects × effects × characteristics). UI sheet de sélection avec autocomplete. Carte "Item à mager" qui affiche stats mageables + stats fixes (PA, Fuite) avec valeurs OCR matchées. SpecGuidedExtractor : pour stats manquantes du spec, cherche le nom dans OCR brut et extrait valeur in-range (rejet out-of-range pour éviter de prendre des headers/runes counts). DisplayName embelli : "Dommage Terre" pour id 88-92, "Résistance X %" pour id 33-37, "Résistance X" pour id 54-58. Aliases dictionary : résistances %/fixe distingués via présence de "%" dans la ligne OCR.
+- **Décision DofusDB stats** : il existe 2 entrées par stat principale (id 10 "Force" vs id 127 "Force %", etc.) — normalize() conserve "%" et parens pour distinguer.
 
 ---
 
-*Dernière mise à jour : fin Phase 1 — 2026-05-19*
+*Dernière mise à jour : fin Phase 2.6 — 2026-05-19*
