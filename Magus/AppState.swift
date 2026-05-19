@@ -72,6 +72,10 @@ public final class AppState {
     public var savedPresets: [StatsPreset] = []
     private let decisionEngine = DecisionEngine()
 
+    // File d'attente d'items
+    public var queue: [QueueItem] = []
+    public var isQueueActive = false
+
     // Continuous session monitoring
     public var isSessionActive = false
     public var sessionFps: Double = 0
@@ -138,6 +142,8 @@ public final class AppState {
 
     // Panic stop hotkey
     private let panicHotkey = GlobalHotkey()
+    private let diagnosticsHotkey = GlobalHotkey()
+    let diagnostics = DiagnosticsController()
 
     // DofusDB sync
     public var syncProgress: SyncProgress = SyncProgress(stage: .idle)
@@ -179,6 +185,15 @@ public final class AppState {
         // Hotkey panic stop ⌘⌥. (Cmd+Opt+.)
         panicHotkey.register { [weak self] in
             self?.emergencyStop()
+        }
+
+        // Hotkey diagnostics ⌘⌥D (D = kVK_ANSI_D = 2)
+        diagnosticsHotkey.register(
+            keyCode: 2,
+            modifiers: 256 | 2048  // cmdKey | optionKey (Carbon)
+        ) { [weak self] in
+            guard let self = self else { return }
+            self.diagnostics.toggle(appState: self)
         }
     }
 
@@ -298,6 +313,73 @@ public final class AppState {
 
     private func refreshSavedPresets() {
         savedPresets = (try? presetRepository.allPresets()) ?? []
+    }
+
+    // MARK: - File d'attente
+
+    public func addToQueue() {
+        guard let spec = selectedItem, let preset = currentStatsPreset else { return }
+        let item = QueueItem(
+            itemSpecId: spec.id,
+            itemName: spec.name,
+            presetId: preset.id,
+            presetName: preset.name
+        )
+        queue.append(item)
+    }
+
+    public func removeFromQueue(_ item: QueueItem) {
+        queue.removeAll { $0.id == item.id }
+    }
+
+    public func moveQueueItem(from source: IndexSet, to destination: Int) {
+        queue.move(fromOffsets: source, toOffset: destination)
+    }
+
+    public func clearQueue() {
+        queue.removeAll()
+        isQueueActive = false
+    }
+
+    /// Démarre la file d'attente : passe en mode auto et traite chaque item séquentiellement.
+    /// L'utilisateur doit poser l'item dans Dofus à chaque transition.
+    public func startQueue() {
+        guard !queue.isEmpty else { return }
+        guard automation == .auto else {
+            autoClickError = "La file d'attente nécessite le mode Auto"
+            return
+        }
+        isQueueActive = true
+        advanceToNextQueueItem()
+    }
+
+    public func stopQueue() {
+        isQueueActive = false
+        for i in queue.indices where queue[i].status == .current {
+            queue[i].status = .pending
+        }
+        stopSession()
+    }
+
+    private func advanceToNextQueueItem() {
+        guard isQueueActive else { return }
+        if let currentIdx = queue.firstIndex(where: { $0.status == .current }) {
+            queue[currentIdx].status = .done
+        }
+        guard let nextIdx = queue.firstIndex(where: { $0.status == .pending }) else {
+            isQueueActive = false
+            stopSession()
+            logger.info("File d'attente terminée")
+            return
+        }
+        queue[nextIdx].status = .current
+        let item = queue[nextIdx]
+        selectItem(id: item.itemSpecId)
+        if let preset = try? presetRepository.preset(id: item.presetId) {
+            loadPreset(preset)
+        }
+        startSession()
+        logger.info("File : démarrage item \(item.itemName, privacy: .public)")
     }
 
     /// Recalcule la décision à partir du snapshot courant + preset + spec.

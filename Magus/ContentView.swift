@@ -8,6 +8,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var appState = AppState()
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "magus.onboardingDone")
 
     var body: some View {
         Group {
@@ -21,6 +22,9 @@ struct ContentView: View {
         .frame(minWidth: 1100, minHeight: 700)
         .background(Theme.Colors.bg)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingSheet(appState: appState, isPresented: $showOnboarding)
+        }
     }
 }
 
@@ -141,6 +145,7 @@ private struct HomeView: View {
                 actionRecommendationCard
                 dofusCard
                 itemPickerCard
+                queueCard
                 if let profile = appState.savedProfiles.first(where: { $0.isComplete }) {
                     ocrTestCard(profile: profile)
                 }
@@ -150,6 +155,89 @@ private struct HomeView: View {
             .padding(.horizontal, Theme.Spacing.xxxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var queueCard: some View {
+        Card(title: "File d'attente") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                if appState.queue.isEmpty {
+                    HStack {
+                        Text("File vide. Ajoute l'item + preset courant à la file pour traiter plusieurs items en batch.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Spacer()
+                        MagusButton("Ajouter à la file", icon: "plus.circle", style: .secondary,
+                                    isDisabled: appState.selectedItem == nil || appState.currentStatsPreset == nil) {
+                            appState.addToQueue()
+                        }
+                    }
+                } else {
+                    ForEach(appState.queue) { item in
+                        queueRow(item: item)
+                    }
+                    HStack {
+                        MagusButton("Ajouter", icon: "plus.circle", style: .ghost,
+                                    isDisabled: appState.selectedItem == nil || appState.currentStatsPreset == nil) {
+                            appState.addToQueue()
+                        }
+                        Spacer()
+                        if appState.isQueueActive {
+                            MagusButton("Stopper la file", icon: "stop.circle", style: .danger) {
+                                appState.stopQueue()
+                            }
+                        } else {
+                            MagusButton("Vider la file", icon: "trash", style: .ghost) {
+                                appState.clearQueue()
+                            }
+                            MagusButton("Démarrer la file", icon: "play.circle", style: .primary,
+                                        isDisabled: appState.automation != .auto || appState.detectedWindow == nil) {
+                                appState.startQueue()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func queueRow(item: QueueItem) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            statusBadge(for: item.status)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.itemName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(item.presetName)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            Spacer()
+            if item.status == .pending {
+                Button {
+                    appState.removeFromQueue(item)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func statusBadge(for status: QueueItem.Status) -> some View {
+        let (color, icon): (Color, String) = {
+            switch status {
+            case .pending: return (Theme.Colors.textTertiary, "circle")
+            case .current: return (Theme.Colors.accent, "arrow.right.circle.fill")
+            case .done: return (Theme.Colors.success, "checkmark.circle.fill")
+            case .skipped: return (Theme.Colors.warning, "xmark.circle.fill")
+            }
+        }()
+        return Image(systemName: icon)
+            .font(.system(size: 14))
+            .foregroundStyle(color)
     }
 
     private var bibliothequeWorkspace: some View {
@@ -440,7 +528,7 @@ private struct HomeView: View {
     }
 
     @State private var showItemPicker = false
-
+    @State private var showPresetEditor = false
     @State private var showAutoWarning = false
 
     @ViewBuilder
@@ -788,6 +876,10 @@ private struct HomeView: View {
                         .background(Theme.Colors.surfaceElev)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                         Spacer()
+                        MagusButton("Éditer", icon: "slider.horizontal.3", style: .ghost,
+                                    isDisabled: appState.currentStatsPreset == nil) {
+                            showPresetEditor = true
+                        }
                         MagusButton("Sauvegarder", icon: "square.and.arrow.down", style: .secondary) {
                             appState.saveCurrentPreset()
                         }
@@ -833,6 +925,11 @@ private struct HomeView: View {
         }
         .sheet(isPresented: $showItemPicker) {
             ItemPickerSheet(appState: appState, isPresented: $showItemPicker)
+        }
+        .sheet(isPresented: $showPresetEditor) {
+            if let preset = appState.currentStatsPreset {
+                PresetEditorSheet(appState: appState, isPresented: $showPresetEditor, preset: preset)
+            }
         }
     }
 

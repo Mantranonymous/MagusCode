@@ -13,11 +13,13 @@ public struct DecisionEngine: Sendable {
     private let maging: MagingStrategy
     private let exoPA: ExoStrategy
     private let exoPM: ExoStrategy
+    private let leveling: LevelingStrategy
 
     public init() {
         self.maging = MagingStrategy()
         self.exoPA = ExoStrategy(variant: .exoPA)
         self.exoPM = ExoStrategy(variant: .exoPM)
+        self.leveling = LevelingStrategy()
     }
 
     public func decide(
@@ -26,7 +28,6 @@ public struct DecisionEngine: Sendable {
         preset: PresetBundle,
         spec: ItemSpec?
     ) -> Decision {
-        // Le scénario du preset dispatch vers la bonne stratégie
         switch preset.stats.scenario {
         case .jetParfait, .overVita:
             return maging.decide(snapshot: snapshot, preset: preset, spec: spec)
@@ -34,6 +35,8 @@ public struct DecisionEngine: Sendable {
             return exoPA.decide(snapshot: snapshot, preset: preset, spec: spec)
         case .exoPM:
             return exoPM.decide(snapshot: snapshot, preset: preset, spec: spec)
+        case .leveling:
+            return leveling.decide(snapshot: snapshot, preset: preset, spec: spec)
         }
     }
 }

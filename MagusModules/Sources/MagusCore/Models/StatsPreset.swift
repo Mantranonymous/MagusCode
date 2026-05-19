@@ -18,9 +18,10 @@ public struct StatTarget: Hashable, Codable, Sendable {
 /// Scénario de FM. Détermine quelle stratégie utiliser et comment auto-générer le preset.
 public enum PresetScenario: String, Codable, CaseIterable, Sendable {
     case jetParfait     // toutes les stats au max théorique
-    case exoPA          // tente d'ajouter un PA exotique (item sans PA)
+    case exoPA          // tente d'ajouter un PA exotique
     case exoPM          // tente d'ajouter un PM exotique
-    case overVita       // jet parfait + over Vitalité au-dessus du max
+    case overVita       // jet parfait + over Vitalité
+    case leveling       // maximise XP métier — clique des grosses runes en boucle
 
     public var displayName: String {
         switch self {
@@ -28,6 +29,7 @@ public enum PresetScenario: String, Codable, CaseIterable, Sendable {
         case .exoPA: return "Exo PA"
         case .exoPM: return "Exo PM"
         case .overVita: return "Over Vitalité"
+        case .leveling: return "Leveling XP"
         }
     }
 
@@ -37,6 +39,7 @@ public enum PresetScenario: String, Codable, CaseIterable, Sendable {
         case .exoPA: return "Exo PA"
         case .exoPM: return "Exo PM"
         case .overVita: return "Over Vita"
+        case .leveling: return "Leveling"
         }
     }
 }
@@ -76,7 +79,28 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
         case .exoPA: return exoPA(for: spec)
         case .exoPM: return exoPM(for: spec)
         case .overVita: return overVita(for: spec)
+        case .leveling: return leveling(for: spec)
         }
+    }
+
+    /// Leveling : on s'en fout du jet, on veut maximiser XP. Toutes les stats mageables
+    /// ciblées au max avec priorité égale → stratégie pousse les grosses runes en boucle.
+    public static func leveling(for spec: ItemSpec) -> StatsPreset {
+        var targets: [StatKind: StatTarget] = [:]
+        for s in spec.stats where s.isMageable {
+            targets[s.kind] = StatTarget(
+                target: s.maxValue,
+                minimum: s.minValue,
+                priority: 50,
+                enabled: true
+            )
+        }
+        return StatsPreset(
+            name: "Leveling XP — \(spec.name)",
+            scenario: .leveling,
+            itemSpecId: spec.id,
+            targets: targets
+        )
     }
 
     /// Jet parfait : chaque stat mageable a target = maxValue, priorité 100.

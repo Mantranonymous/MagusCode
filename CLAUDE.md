@@ -43,12 +43,12 @@ Règle de dépendance : `UI → Core` uniquement. `Perception` et `Decision` ne 
 - [x] **Phase 0** — Foundations ✅ (2026-05-19)
 - [x] **Phase 1** — Capture & OCR Pipeline ✅ (2026-05-19)
 - [x] **Phase 2** — Domain Model & Parsing ✅ (2026-05-19)
-- [x] **Phase 3** — Decision Engine ✅ partiel (2026-05-19) — MagingStrategy v2 + ExoStrategy, LevelingStrategy à venir
-- [ ] **Phase 4** — UI Foundation & Design System (partiel : Theme tokens, composants à raffiner)
-- [x] **Phase 5** — Sidebar nav 3 routes ✅ partiel (2026-05-19), modes Maging/Leveling/File d'attente à finaliser
+- [x] **Phase 3** — Decision Engine ✅ (2026-05-19) — MagingStrategy v2 + ExoStrategy + LevelingStrategy
+- [x] **Phase 4** — UI partiel ✅ (Theme tokens + PresetEditor + composants), fonts custom et raffinements restants
+- [x] **Phase 5** — Sidebar nav 3 routes + File d'attente d'items ✅ (2026-05-19)
 - [x] **Phase 6** — Overlay In-Game ✅ (2026-05-19)
-- [x] **Phase 7** — Auto-clic ✅ (2026-05-19) — avec mode Démo + anti-régression
-- [ ] **Phase 8** — VLM Fallback & Polish
+- [x] **Phase 7** — Auto-clic + Human motion + Hotkey panic ✅ (2026-05-19)
+- [x] **Phase 8** — Onboarding + Diagnostics + FileLogger + AppIcon ✅ partiel (2026-05-19), VLM fallback restant
 
 ## Conventions importantes
 
@@ -124,4 +124,6 @@ xcodebuild -scheme Magus -configuration Debug build
 
 ---
 
-*Dernière mise à jour : fin Phase 3.5 — 2026-05-19*
+*Dernière mise à jour : fin marathon Phase 3 → 8 — 2026-05-19*
+
+- **Marathon final (2026-05-19)** : LevelingStrategy + scenario Leveling. File d'attente (QueueItem + UI add/remove/start/stop). PresetEditor sheet (toggle + slider priority + target par stat). FileLogger + LogBuffer en mémoire. DiagnosticsWindow (⌥⌘D, 5 tabs : Logs/Parsé/OCR brut/Decision/Système). OnboardingSheet 4 étapes (welcome/permissions/DofusDB/calibration). App icon générée par script Swift (10 résolutions PNG).
