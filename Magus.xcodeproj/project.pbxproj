@@ -1,0 +1,339 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4A0000000000000000000050 /* MagusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000020 /* MagusApp.swift */; };
+		4A0000000000000000000051 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000021 /* ContentView.swift */; };
+		4A0000000000000000000052 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A0000000000000000000022 /* Assets.xcassets */; };
+		4A0000000000000000000053 /* MagusCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000090 /* MagusCommon */; };
+		4A0000000000000000000054 /* MagusCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000091 /* MagusCore */; };
+		4A0000000000000000000055 /* MagusUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000092 /* MagusUI */; };
+		4A0000000000000000000056 /* MagusPerception in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000093 /* MagusPerception */; };
+		4A0000000000000000000057 /* MagusDecision in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000094 /* MagusDecision */; };
+		4A0000000000000000000058 /* MagusExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000095 /* MagusExecution */; };
+		4A0000000000000000000059 /* MagusPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000096 /* MagusPersistence */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4A0000000000000000000020 /* MagusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagusApp.swift; sourceTree = "<group>"; };
+		4A0000000000000000000021 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4A0000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4A0000000000000000000023 /* Magus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Magus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4A0000000000000000000024 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4A0000000000000000000025 /* Magus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Magus.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4A0000000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A0000000000000000000053 /* MagusCommon in Frameworks */,
+				4A0000000000000000000054 /* MagusCore in Frameworks */,
+				4A0000000000000000000055 /* MagusUI in Frameworks */,
+				4A0000000000000000000056 /* MagusPerception in Frameworks */,
+				4A0000000000000000000057 /* MagusDecision in Frameworks */,
+				4A0000000000000000000058 /* MagusExecution in Frameworks */,
+				4A0000000000000000000059 /* MagusPersistence in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4A0000000000000000000010 /* root */ = {
+			isa = PBXGroup;
+			children = (
+				4A0000000000000000000011 /* Magus */,
+				4A0000000000000000000012 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4A0000000000000000000011 /* Magus */ = {
+			isa = PBXGroup;
+			children = (
+				4A0000000000000000000020 /* MagusApp.swift */,
+				4A0000000000000000000021 /* ContentView.swift */,
+				4A0000000000000000000022 /* Assets.xcassets */,
+				4A0000000000000000000024 /* Info.plist */,
+				4A0000000000000000000025 /* Magus.entitlements */,
+			);
+			path = Magus;
+			sourceTree = "<group>";
+		};
+		4A0000000000000000000012 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A0000000000000000000023 /* Magus.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4A0000000000000000000030 /* Magus */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A0000000000000000000071 /* Build configuration list for PBXNativeTarget "Magus" */;
+			buildPhases = (
+				4A0000000000000000000040 /* Sources */,
+				4A0000000000000000000041 /* Frameworks */,
+				4A0000000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Magus;
+			packageProductDependencies = (
+				4A0000000000000000000090 /* MagusCommon */,
+				4A0000000000000000000091 /* MagusCore */,
+				4A0000000000000000000092 /* MagusUI */,
+				4A0000000000000000000093 /* MagusPerception */,
+				4A0000000000000000000094 /* MagusDecision */,
+				4A0000000000000000000095 /* MagusExecution */,
+				4A0000000000000000000096 /* MagusPersistence */,
+			);
+			productName = Magus;
+			productReference = 4A0000000000000000000023 /* Magus.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 4A0000000000000000000070 /* Build configuration list for PBXProject "Magus" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = fr;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				fr,
+				Base,
+			);
+			mainGroup = 4A0000000000000000000010 /* root */;
+			packageReferences = (
+				4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */,
+			);
+			productRefGroup = 4A0000000000000000000012 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4A0000000000000000000030 /* Magus */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4A0000000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A0000000000000000000052 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4A0000000000000000000040 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A0000000000000000000050 /* MagusApp.swift in Sources */,
+				4A0000000000000000000051 /* ContentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A0000000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4A0000000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		4A0000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Magus/Magus.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = Magus/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magus.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		4A0000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Magus/Magus.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = Magus/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magus.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4A0000000000000000000070 /* Build configuration list for PBXProject "Magus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A0000000000000000000060 /* Debug */,
+				4A0000000000000000000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A0000000000000000000071 /* Build configuration list for PBXNativeTarget "Magus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A0000000000000000000062 /* Debug */,
+				4A0000000000000000000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = MagusModules;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4A0000000000000000000090 /* MagusCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusCommon;
+		};
+		4A0000000000000000000091 /* MagusCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusCore;
+		};
+		4A0000000000000000000092 /* MagusUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusUI;
+		};
+		4A0000000000000000000093 /* MagusPerception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusPerception;
+		};
+		4A0000000000000000000094 /* MagusDecision */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusDecision;
+		};
+		4A0000000000000000000095 /* MagusExecution */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusExecution;
+		};
+		4A0000000000000000000096 /* MagusPersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusPersistence;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+	};
+	rootObject = 4A0000000000000000000001 /* Project object */;
+}
