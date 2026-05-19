@@ -17,13 +17,15 @@ public struct OCRResult: Hashable, Sendable {
 /// Ensemble des résultats OCR pour une région donnée.
 public struct RegionOCRResult: Hashable, Sendable {
     public let observations: [OCRResult]
-    public let elapsedMs: Double       // temps d'exécution OCR pour cette région
-    public let engine: String          // identifiant du moteur ("vision", "vlm")
+    public let elapsedMs: Double         // temps d'exécution OCR pour cette région
+    public let engine: String            // identifiant du moteur ("vision", "vlm")
+    public let imageSize: CGSize         // taille en pixels de l'image OCR'd (cropped) — pour convertir bbox → fraction → screen
 
-    public init(observations: [OCRResult], elapsedMs: Double, engine: String) {
+    public init(observations: [OCRResult], elapsedMs: Double, engine: String, imageSize: CGSize = .zero) {
         self.observations = observations
         self.elapsedMs = elapsedMs
         self.engine = engine
+        self.imageSize = imageSize
     }
 
     /// Concatène les textes dans l'ordre vertical (top-to-bottom).

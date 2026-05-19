@@ -3,6 +3,8 @@ import CoreGraphics
 import Foundation
 import MagusCommon
 import MagusCore
+import MagusDecision
+import MagusExecution
 import MagusPerception
 import MagusPersistence
 import MagusReferenceData
@@ -59,6 +61,78 @@ public final class AppState {
     public var selectedItem: ItemSpec?
     public var itemSearchResults: [RefItem] = []
     public var isSearchingItems = false
+
+    // Decision engine
+    public var sessionMode: SessionMode = .maging
+    public var currentScenario: PresetScenario = .jetParfait
+    public var currentStatsPreset: StatsPreset?
+    public var currentConfigPreset: ConfigPreset = .bundledFast
+    public var currentDecision: Decision?
+    private let decisionEngine = DecisionEngine()
+
+    // Continuous session monitoring
+    public var isSessionActive = false
+    public var sessionFps: Double = 0
+    private var sessionTask: Task<Void, Never>?
+    private var isProcessingFrame = false
+    private var lastProcessedAt: Date = .distantPast
+    private let sessionThrottleSeconds: TimeInterval = 0.5
+    private var sessionStartedAt: Date = .distantPast
+
+    // Route de navigation
+    public enum Route: String, Sendable, CaseIterable {
+        case activite
+        case bibliotheque
+        case reglages
+
+        public var displayName: String {
+            switch self {
+            case .activite: return "Activité"
+            case .bibliotheque: return "Bibliothèque"
+            case .reglages: return "Réglages"
+            }
+        }
+
+        public var iconName: String {
+            switch self {
+            case .activite: return "wand.and.stars"
+            case .bibliotheque: return "books.vertical"
+            case .reglages: return "gearshape"
+            }
+        }
+    }
+    public var currentRoute: Route = .activite
+
+    // Mode session
+    public enum SessionAutomation: String, Sendable, CaseIterable {
+        case guided     // overlay seulement, l'utilisateur clique
+        case demo       // simule + log les clicks SANS exécuter (debug)
+        case auto       // Magus clique réellement
+    }
+    public var automation: SessionAutomation = .guided
+    public var showAutoConfirm = false  // contrôle l'affichage de la popup
+
+    // Auto-click safety
+    public var autoClickCount = 0
+    public var demoClickCount = 0  // clicks simulés en mode démo
+    public var lastAutoClickAt: Date = .distantPast
+    public var lastAutoClickDecision: Decision?
+    public var lastClickedStatKind: StatKind?
+    public var lastClickedStatValueBefore: Int?
+    public var consecutiveRegressions = 0
+    public var consecutiveNoChange = 0  // OCR successifs sans changement de stat
+    public var autoClickError: String?
+    private let autoClickMinIntervalSeconds: TimeInterval = 1.5
+    private let autoClickMaxPerSession = 600
+    private let autoClickMaxSessionMinutes: TimeInterval = 30
+    private let maxConsecutiveRegressions = 2
+    private let maxConsecutiveNoChange = 5
+
+    // Overlay
+    private let overlay = OverlayWindow()
+    private let clickMarker = ClickMarkerWindow()
+    private let clickEngine = ClickEngine()
+    private let clickResolver = ClickTargetResolver()
 
     // DofusDB sync
     public var syncProgress: SyncProgress = SyncProgress(stage: .idle)
@@ -154,6 +228,8 @@ public final class AppState {
         do {
             selectedItem = try referenceRepository.itemSpec(id: id)
             itemSearchResults = []
+            regenerateCurrentPreset()
+            recomputeDecision()
             logger.info("Item selected: \(self.selectedItem?.name ?? "?", privacy: .public)")
         } catch {
             logger.error("Item select failed: \(error.localizedDescription, privacy: .public)")
@@ -162,6 +238,159 @@ public final class AppState {
 
     public func clearSelectedItem() {
         selectedItem = nil
+        currentStatsPreset = nil
+        currentDecision = nil
+    }
+
+    /// Change le scénario actif et régénère le preset.
+    public func setScenario(_ scenario: PresetScenario) {
+        currentScenario = scenario
+        regenerateCurrentPreset()
+        recomputeDecision()
+    }
+
+    private func regenerateCurrentPreset() {
+        guard let spec = selectedItem else { return }
+        currentStatsPreset = StatsPreset.make(scenario: currentScenario, for: spec)
+    }
+
+    /// Recalcule la décision à partir du snapshot courant + preset + spec.
+    public func recomputeDecision() {
+        guard let snapshot = lastParsedSnapshot else {
+            currentDecision = nil
+            refreshOverlay()
+            return
+        }
+        guard let stats = currentStatsPreset else {
+            currentDecision = .blocked(reason: .noPresetSelected)
+            refreshOverlay()
+            return
+        }
+        let bundle = PresetBundle(stats: stats, config: currentConfigPreset)
+        currentDecision = decisionEngine.decide(
+            mode: sessionMode,
+            snapshot: snapshot,
+            preset: bundle,
+            spec: selectedItem
+        )
+        refreshOverlay()
+        Task { await self.tryAutoClick() }
+    }
+
+    /// Anti-régression : vérifie si le dernier click a fait baisser la stat ciblée.
+    /// Détecte aussi no-change (rien n'a bougé → click probablement perdu ou inefficace).
+    @MainActor
+    private func checkRegressionAfterClick() {
+        guard let lastKind = lastClickedStatKind,
+              let valueBefore = lastClickedStatValueBefore,
+              let currentSnapshot = lastParsedSnapshot,
+              let currentValue = currentSnapshot.item?.stat(matching: lastKind)?.value else {
+            return
+        }
+        if currentValue < valueBefore {
+            consecutiveRegressions += 1
+            consecutiveNoChange = 0
+            logger.warning("Regression \(self.consecutiveRegressions): \(currentValue) < \(valueBefore) on stat #\(lastKind.characteristicId)")
+            if consecutiveRegressions >= maxConsecutiveRegressions {
+                autoClickError = "Régression détectée \(consecutiveRegressions)× → ARRÊT AUTO"
+                stopSession()
+            }
+        } else if currentValue > valueBefore {
+            consecutiveRegressions = 0
+            consecutiveNoChange = 0
+        } else {
+            // Pas de changement → click peut-être perdu
+            consecutiveNoChange += 1
+            logger.debug("No-change #\(self.consecutiveNoChange) sur stat #\(lastKind.characteristicId)")
+            if consecutiveNoChange >= maxConsecutiveNoChange {
+                autoClickError = "Aucun changement après \(consecutiveNoChange) clics → click probablement perdu. Vérifie la calibration."
+                stopSession()
+            }
+        }
+        lastClickedStatKind = nil
+        lastClickedStatValueBefore = nil
+    }
+
+    /// Exécute un clic auto si toutes les conditions sont réunies.
+    @MainActor
+    private func tryAutoClick() async {
+        // Vérification post-click précédent
+        checkRegressionAfterClick()
+
+        guard isSessionActive else { return }
+        guard automation == .auto || automation == .demo else { return }
+        guard let decision = currentDecision else { return }
+        guard case let .applyRune(rune, kind, _) = decision else { return }
+        guard let spec = selectedItem,
+              let window = detectedWindow,
+              let profile = savedProfiles.first(where: { $0.isComplete }),
+              let statsRegion = profile.regions[.stats] else { return }
+
+        let now = Date()
+        let sinceLast = now.timeIntervalSince(lastAutoClickAt)
+        guard sinceLast >= autoClickMinIntervalSeconds else { return }
+
+        // Safety limits
+        guard autoClickCount < autoClickMaxPerSession else {
+            autoClickError = "Limite de clics atteinte (\(autoClickMaxPerSession))"
+            stopSession()
+            return
+        }
+        let sessionDuration = now.timeIntervalSince(sessionStartedAt) / 60
+        guard sessionDuration < autoClickMaxSessionMinutes else {
+            autoClickError = "Limite de temps atteinte (\(Int(autoClickMaxSessionMinutes)) min)"
+            stopSession()
+            return
+        }
+
+        // Calculate click position
+        let displayName = self.displayName(for: kind)
+        guard let point = clickResolver.cellPosition(
+            for: kind,
+            rank: rune.power,
+            spec: spec,
+            statsRegionBounds: statsRegion.bounds,
+            baseColumnBounds: profile.regions[.statsBaseColumn]?.bounds,
+            paColumnBounds: profile.regions[.statsPaColumn]?.bounds,
+            raColumnBounds: profile.regions[.statsRaColumn]?.bounds,
+            ocrSnapshot: lastOCRSnapshot,
+            statsDisplayName: displayName,
+            dofusBounds: window.bounds
+        ) else {
+            autoClickError = "Position cellule introuvable"
+            return
+        }
+
+        // Track la valeur AVANT le click pour détection régression
+        lastClickedStatKind = kind
+        lastClickedStatValueBefore = lastParsedSnapshot?.item?.stat(matching: kind)?.value
+
+        if automation == .demo {
+            demoClickCount += 1
+            lastAutoClickAt = now
+            lastAutoClickDecision = decision
+            logger.info("[DEMO] Would click @(\(Int(point.x), privacy: .public), \(Int(point.y), privacy: .public)) — \(rune.power.rawValue, privacy: .public) on \(displayName, privacy: .public)")
+        } else {
+            do {
+                try await clickEngine.click(at: point, pid: window.processID)
+                autoClickCount += 1
+                lastAutoClickAt = now
+                lastAutoClickDecision = decision
+                autoClickError = nil
+                logger.info("Auto-click #\(self.autoClickCount) @(\(Int(point.x), privacy: .public),\(Int(point.y), privacy: .public))")
+            } catch {
+                autoClickError = "Click failed: \(error.localizedDescription)"
+                logger.error("Auto-click failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// L'auto requiert que les 3 colonnes click soient calibrées pour précision.
+    public var canStartAuto: Bool {
+        guard let profile = savedProfiles.first(where: { $0.isComplete }) else { return false }
+        return profile.regions[.statsBaseColumn] != nil
+            && profile.regions[.statsPaColumn] != nil
+            && profile.regions[.statsRaColumn] != nil
     }
 
     public func checkAndSyncReference() async {
@@ -306,8 +535,7 @@ public final class AppState {
         await startCalibration()
     }
 
-    /// Capture une nouvelle frame de Dofus et fait tourner l'OCR pipeline puis les parsers.
-    /// Si un item est sélectionné, filtre les stats parsées au spec et enrichit via SpecGuidedExtractor.
+    /// Capture une nouvelle frame de Dofus et fait tourner le pipeline complet une fois.
     public func runOCRTest(profile: ResolutionProfile) async {
         guard let window = detectedWindow else { return }
         isRunningOCR = true
@@ -316,53 +544,206 @@ public final class AppState {
         do {
             let stream = try await screenCapture.start(windowID: window.windowID, rate: .idle)
             for await frame in stream {
-                let pipeline = OCRPipeline()
-                let raw = await pipeline.recognize(frame: frame, profile: profile)
-                let dict = await buildStatDictionary()
-                let builder = SnapshotBuilder(dictionary: dict)
-                var parsed = builder.build(from: raw)
-
-                // Filtrage + enrichissement via ItemSpec
-                if let spec = selectedItem {
-                    let allowedKinds = Set(spec.stats.map(\.kind))
-                    let filtered = (parsed.item?.stats ?? []).filter { allowedKinds.contains($0.kind) }
-                    let statsText = raw.results[.stats]?.joinedText ?? ""
-                    let extractor = SpecGuidedExtractor(dictionary: dict)
-                    let enriched = extractor.enrich(parsed: filtered, with: spec, ocrText: statsText)
-
-                    let newItem = Item(
-                        id: parsed.item?.id ?? UUID(),
-                        referenceItemId: spec.id,
-                        name: spec.name,
-                        level: spec.level,
-                        typeId: spec.typeId,
-                        stats: enriched,
-                        exos: parsed.item?.exos ?? []
-                    )
-                    parsed = GameStateSnapshot(
-                        timestamp: parsed.timestamp,
-                        item: newItem,
-                        history: parsed.history,
-                        reliquat: parsed.reliquat,
-                        jobLevel: parsed.jobLevel,
-                        jobName: parsed.jobName
-                    )
-                }
-
-                let previous = lastParsedSnapshot
-                let diff = previous.map { StateDiff(from: $0, to: parsed) }
-
-                await MainActor.run {
-                    self.lastOCRSnapshot = raw
-                    self.lastParsedSnapshot = parsed
-                    self.lastStateDiff = diff
-                }
+                await processFrame(frame, profile: profile)
                 await screenCapture.stop()
-                logger.info("OCR+parse done in \(raw.totalElapsedMs)ms — \(parsed.item?.stats.count ?? 0) stats")
                 return
             }
         } catch {
             logger.error("OCR test failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Démarre une session de monitoring continue. L'OCR tourne toutes les ~500ms,
+    /// la décision est recalculée à chaque snapshot. L'overlay est mis à jour.
+    public func startSession() {
+        guard !isSessionActive else { return }
+        guard let window = detectedWindow else {
+            logger.error("Cannot start session: no Dofus window detected")
+            return
+        }
+        guard let profile = savedProfiles.first(where: { $0.isComplete }) else {
+            logger.error("Cannot start session: no complete profile")
+            return
+        }
+        // Si auto choisi mais colonnes pas calibrées → bascule en démo (refus silencieux)
+        if automation == .auto && !canStartAuto {
+            logger.warning("Auto demandé mais colonnes click non calibrées → bascule en demo")
+            automation = .demo
+        }
+        isSessionActive = true
+        sessionStartedAt = Date()
+        autoClickCount = 0
+        demoClickCount = 0
+        consecutiveRegressions = 0
+        lastClickedStatKind = nil
+        lastClickedStatValueBefore = nil
+        autoClickError = nil
+        sessionTask = Task { [weak self] in
+            await self?.runSessionLoop(windowID: window.windowID, profile: profile)
+            await MainActor.run { self?.isSessionActive = false }
+        }
+        logger.info("Session démarrée (mode \(self.automation.rawValue, privacy: .public))")
+    }
+
+    public func stopSession() {
+        sessionTask?.cancel()
+        sessionTask = nil
+        isSessionActive = false
+        sessionFps = 0
+        overlay.hide()
+        clickMarker.hide()
+        logger.info("Session stoppée")
+    }
+
+    /// ARRÊT D'URGENCE : stop tout immédiatement, force le mode guidé pour la prochaine session.
+    public func emergencyStop() {
+        stopSession()
+        automation = .guided
+        autoClickError = "Arrêt d'urgence déclenché"
+        logger.warning("EMERGENCY STOP")
+    }
+
+    /// Met à jour l'overlay + click marker à partir de la décision courante.
+    private func refreshOverlay() {
+        guard isSessionActive,
+              let window = detectedWindow,
+              let decision = currentDecision else {
+            overlay.hide()
+            clickMarker.hide()
+            return
+        }
+        let (title, subtitle, severity) = overlayContent(for: decision)
+        overlay.show(dofusBounds: window.bounds) {
+            OverlayContent(title: title, subtitle: subtitle, severity: severity)
+        }
+
+        // Click marker : affiché si on a une applyRune ET un click position calculable
+        if case let .applyRune(rune, kind, _) = decision,
+           let spec = selectedItem,
+           let profile = savedProfiles.first(where: { $0.isComplete }),
+           let statsRegion = profile.regions[.stats],
+           (automation == .demo || automation == .auto) {
+            let displayName = self.displayName(for: kind)
+            if let point = clickResolver.cellPosition(
+                for: kind,
+                rank: rune.power,
+                spec: spec,
+                statsRegionBounds: statsRegion.bounds,
+                baseColumnBounds: profile.regions[.statsBaseColumn]?.bounds,
+                paColumnBounds: profile.regions[.statsPaColumn]?.bounds,
+                raColumnBounds: profile.regions[.statsRaColumn]?.bounds,
+                ocrSnapshot: lastOCRSnapshot,
+                statsDisplayName: displayName,
+                dofusBounds: window.bounds
+            ) {
+                clickMarker.show(at: point)
+            } else {
+                clickMarker.hide()
+            }
+        } else {
+            clickMarker.hide()
+        }
+    }
+
+    private func overlayContent(for decision: Decision) -> (String, String, OverlayContent.Severity) {
+        switch decision {
+        case .applyRune(let rune, let kind, let explanation):
+            let prefix = rune.power.prefix.isEmpty ? "" : "\(rune.power.prefix) "
+            let title = "Rune \(prefix)\(displayName(for: kind))"
+            return (title, explanation, .action)
+        case .applyExo(let slot, let explanation):
+            return ("Exo \(slot.displayName)", explanation, .exo)
+        case .applyAntiRune(let rune, let kind, let explanation):
+            let prefix = rune.power.prefix.isEmpty ? "" : "\(rune.power.prefix) "
+            return ("Anti-rune \(prefix)\(displayName(for: kind))", explanation, .danger)
+        case .finished(let e):
+            return ("Jet parfait atteint", e, .success)
+        case .waitingForUser(let reason):
+            return ("En attente", reason, .info)
+        case .blocked(let reason):
+            return ("Bloqué", reason.description, .info)
+        }
+    }
+
+    private func runSessionLoop(windowID: CGWindowID, profile: ResolutionProfile) async {
+        do {
+            let stream = try await screenCapture.start(windowID: windowID, rate: .idle)
+            var framesInWindow = 0
+            var windowStart = Date()
+            for await frame in stream {
+                if Task.isCancelled { break }
+                let now = Date()
+                guard now.timeIntervalSince(lastProcessedAt) >= sessionThrottleSeconds else { continue }
+                guard !isProcessingFrame else { continue }
+                lastProcessedAt = now
+
+                await processFrame(frame, profile: profile)
+
+                framesInWindow += 1
+                let elapsed = now.timeIntervalSince(windowStart)
+                if elapsed >= 5 {
+                    let fps = Double(framesInWindow) / elapsed
+                    await MainActor.run { self.sessionFps = fps }
+                    framesInWindow = 0
+                    windowStart = now
+                }
+            }
+            await screenCapture.stop()
+        } catch {
+            logger.error("Session loop failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Pipeline complet : OCR → parsing → filtrage spec → extraction guidée → snapshot → décision.
+    private func processFrame(_ frame: CaptureFrame, profile: ResolutionProfile) async {
+        guard !isProcessingFrame else { return }
+        isProcessingFrame = true
+        defer { isProcessingFrame = false }
+
+        await MainActor.run { self.isRunningOCR = true }
+        defer { Task { @MainActor in self.isRunningOCR = false } }
+
+        let pipeline = OCRPipeline()
+        let raw = await pipeline.recognize(frame: frame, profile: profile)
+        let dict = await buildStatDictionary()
+        let builder = SnapshotBuilder(dictionary: dict)
+        var parsed = builder.build(from: raw)
+
+        // Filtrage + enrichissement via ItemSpec
+        if let spec = selectedItem {
+            let allowedKinds = Set(spec.stats.map(\.kind))
+            let filtered = (parsed.item?.stats ?? []).filter { allowedKinds.contains($0.kind) }
+            let statsText = raw.results[.stats]?.joinedText ?? ""
+            let extractor = SpecGuidedExtractor(dictionary: dict)
+            let enriched = extractor.enrich(parsed: filtered, with: spec, ocrText: statsText)
+
+            let newItem = Item(
+                id: parsed.item?.id ?? UUID(),
+                referenceItemId: spec.id,
+                name: spec.name,
+                level: spec.level,
+                typeId: spec.typeId,
+                stats: enriched,
+                exos: parsed.item?.exos ?? []
+            )
+            parsed = GameStateSnapshot(
+                timestamp: parsed.timestamp,
+                item: newItem,
+                history: parsed.history,
+                reliquat: parsed.reliquat,
+                jobLevel: parsed.jobLevel,
+                jobName: parsed.jobName
+            )
+        }
+
+        let previous = lastParsedSnapshot
+        let diff = previous.map { StateDiff(from: $0, to: parsed) }
+
+        await MainActor.run {
+            self.lastOCRSnapshot = raw
+            self.lastParsedSnapshot = parsed
+            self.lastStateDiff = diff
+            self.recomputeDecision()
         }
     }
 

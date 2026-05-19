@@ -33,11 +33,18 @@ public struct ResolutionProfile: Codable, Identifiable, Hashable, Sendable {
         CGSize(width: referenceWidth, height: referenceHeight)
     }
 
+    /// Profil "complet" = toutes les régions requises sont définies.
+    /// Les régions optionnelles (colonnes click) ne sont pas comptées.
     public var isComplete: Bool {
-        RegionKind.allCases.allSatisfy { regions[$0] != nil }
+        RegionKind.allCases.filter(\.isRequired).allSatisfy { regions[$0] != nil }
     }
 
     public var missingRegions: [RegionKind] {
+        RegionKind.allCases.filter { $0.isRequired && regions[$0] == nil }
+    }
+
+    /// Toutes les régions manquantes (incluant optionnelles).
+    public var allMissingRegions: [RegionKind] {
         RegionKind.allCases.filter { regions[$0] == nil }
     }
 

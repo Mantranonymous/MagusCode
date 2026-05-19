@@ -43,11 +43,11 @@ Règle de dépendance : `UI → Core` uniquement. `Perception` et `Decision` ne 
 - [x] **Phase 0** — Foundations ✅ (2026-05-19)
 - [x] **Phase 1** — Capture & OCR Pipeline ✅ (2026-05-19)
 - [x] **Phase 2** — Domain Model & Parsing ✅ (2026-05-19)
-- [ ] **Phase 3** — Decision Engine
-- [ ] **Phase 4** — UI Foundation & Design System
-- [ ] **Phase 5** — Modes Implementation (UI)
-- [ ] **Phase 6** — Overlay In-Game
-- [ ] **Phase 7** — Auto-clic
+- [x] **Phase 3** — Decision Engine ✅ partiel (2026-05-19) — MagingStrategy v2 + ExoStrategy, LevelingStrategy à venir
+- [ ] **Phase 4** — UI Foundation & Design System (partiel : Theme tokens, composants à raffiner)
+- [x] **Phase 5** — Sidebar nav 3 routes ✅ partiel (2026-05-19), modes Maging/Leveling/File d'attente à finaliser
+- [x] **Phase 6** — Overlay In-Game ✅ (2026-05-19)
+- [x] **Phase 7** — Auto-clic ✅ (2026-05-19) — avec mode Démo + anti-régression
 - [ ] **Phase 8** — VLM Fallback & Polish
 
 ## Conventions importantes
@@ -117,7 +117,11 @@ xcodebuild -scheme Magus -configuration Debug build
 - **Phase 2.5 (2026-05-19)** : Corrections domain post-guide FM appliquées. Rune.Power (base/pa/ra avec densités 1/3/10), Métier enum (6 métiers + mapping itemTypeId), Reliquat (Double car valeurs décimales type 2.2), ItemProfile (Concessions/Puits/Brisages), OverInfo (cap 101). MageHistoryEntry.Result renommé criticalSuccess/neutralSuccess/criticalFail. Sink supprimé (n'existe pas en Dofus 3, c'était Puits=Reliquat). Region.reliquat ajoutée + ReliquatParser. Fix calibration UX (offset drag + resize handles + move via drag intérieur).
 - **Phase 2.6 (2026-05-19)** : Identification item via DofusDB. ItemSpec + StatSpec, ReferenceRepository.searchItems + itemSpec (join items × item_effects × effects × characteristics). UI sheet de sélection avec autocomplete. Carte "Item à mager" qui affiche stats mageables + stats fixes (PA, Fuite) avec valeurs OCR matchées. SpecGuidedExtractor : pour stats manquantes du spec, cherche le nom dans OCR brut et extrait valeur in-range (rejet out-of-range pour éviter de prendre des headers/runes counts). DisplayName embelli : "Dommage Terre" pour id 88-92, "Résistance X %" pour id 33-37, "Résistance X" pour id 54-58. Aliases dictionary : résistances %/fixe distingués via présence de "%" dans la ligne OCR.
 - **Décision DofusDB stats** : il existe 2 entrées par stat principale (id 10 "Force" vs id 127 "Force %", etc.) — normalize() conserve "%" et parens pour distinguer.
+- **Phase 3 (2026-05-19)** : Decision Engine. Models StatsPreset/ConfigPreset/Decision/PresetBundle. MagingStrategy V2 (skip over, skip max, reliquat-aware, tri par urgency). ExoStrategy (variants exoPA/exoPM). DecisionEngine dispatch via PresetScenario. 4 scénarios auto-générés depuis ItemSpec : jetParfait / exoPA / exoPM / overVita. Carte "Action recommandée" en haut du Home.
+- **Phase 6 (2026-05-19)** : OverlayWindow (NSWindow level CGShieldingWindowLevel, ignoresMouseEvents, suit Dofus). OverlayContent (badge avec icône+titre+sous-titre, bordure colorée). ClickMarkerWindow (réticule rouge pulsant à la position du futur click).
+- **Phase 7 (2026-05-19)** : ClickEngine (CGEvent via .cghidEventTap + NSRunningApplication.activate avant click + setIntegerValueField mouseEventClickState). ClickTargetResolver (row Y via OCR bbox + result.imageSize, col X via régions calibrables statsBaseColumn/statsPaColumn/statsRaColumn ou fractions empiriques). 3 modes : Guided / Démo (sans exec) / Auto. Safety : popup warning, lock Auto si colonnes pas calibrées, anti-régression 2× → emergency stop, no-change 5× → stop, max 600 clicks/session, max 30min.
+- **Phase 5 partiel (2026-05-19)** : Sidebar nav 3 routes (Activité / Bibliothèque / Réglages). Inspector visible seulement sur Activité. Indicateur session active dans le sidebar.
 
 ---
 
-*Dernière mise à jour : fin Phase 2.6 — 2026-05-19*
+*Dernière mise à jour : fin Phase 3.5 — 2026-05-19*

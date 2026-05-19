@@ -1,3 +1,4 @@
+import MagusCore
 import CoreGraphics
 import Foundation
 import MagusCommon

@@ -22,13 +22,15 @@ public struct WindowFinder: Sendable {
         self.pollInterval = pollInterval
     }
 
-    /// Recherche ponctuelle. Retourne `nil` si la fenêtre n'est pas trouvée.
+    /// Recherche ponctuelle. Retourne la PLUS GRANDE fenêtre matching pour éviter
+    /// les mini-fenêtres parasites (chat, tooltip, etc.).
     public func find() -> WindowInfo? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
 
+        var candidates: [WindowInfo] = []
         for entry in raw {
             guard
                 let layer = entry[kCGWindowLayer as String] as? Int,
@@ -56,15 +58,22 @@ public struct WindowFinder: Sendable {
                 let bounds = CGRect(dictionaryRepresentation: boundsDict)
             else { continue }
 
-            return WindowInfo(
+            // Ignore les fenêtres trop petites (chat bubble, tooltip…)
+            guard bounds.width >= 300, bounds.height >= 200 else { continue }
+
+            candidates.append(WindowInfo(
                 windowID: windowID,
                 processID: pid,
                 bundleIdentifier: bundleID,
                 title: title,
                 bounds: bounds
-            )
+            ))
         }
-        return nil
+
+        // Choisis la plus grande fenêtre (par surface)
+        return candidates.max(by: { lhs, rhs in
+            lhs.bounds.width * lhs.bounds.height < rhs.bounds.width * rhs.bounds.height
+        })
     }
 
     /// Stream qui émet une nouvelle valeur dès que la fenêtre change (position, taille, apparition, disparition).
