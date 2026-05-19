@@ -39,6 +39,7 @@ public final class AppState {
     public let regionRepository: RegionRepository
     public let referenceRepository: ReferenceRepository
     public let referenceSync: ReferenceDataSync
+    public let presetRepository: PresetRepository
 
     // State
     public var mode: Mode = .home
@@ -68,6 +69,7 @@ public final class AppState {
     public var currentStatsPreset: StatsPreset?
     public var currentConfigPreset: ConfigPreset = .bundledFast
     public var currentDecision: Decision?
+    public var savedPresets: [StatsPreset] = []
     private let decisionEngine = DecisionEngine()
 
     // Continuous session monitoring
@@ -134,6 +136,9 @@ public final class AppState {
     private let clickEngine = ClickEngine()
     private let clickResolver = ClickTargetResolver()
 
+    // Panic stop hotkey
+    private let panicHotkey = GlobalHotkey()
+
     // DofusDB sync
     public var syncProgress: SyncProgress = SyncProgress(stage: .idle)
     public var lastSyncAt: Date?
@@ -158,16 +163,23 @@ public final class AppState {
         }
         self.regionRepository = RegionRepository(database: db)
         self.referenceRepository = ReferenceRepository(database: db)
+        self.presetRepository = PresetRepository(database: db)
         self.referenceSync = ReferenceDataSync(
             client: DofusDBClient(),
             repository: self.referenceRepository
         )
         self.savedProfiles = (try? regionRepository.allProfiles()) ?? []
+        self.savedPresets = (try? presetRepository.allPresets()) ?? []
         loadReferenceMeta()
         bootstrap()
 
         // Lance la sync DofusDB en arrière-plan si nécessaire
         Task { await self.checkAndSyncReference() }
+
+        // Hotkey panic stop ⌘⌥. (Cmd+Opt+.)
+        panicHotkey.register { [weak self] in
+            self?.emergencyStop()
+        }
     }
 
     private func loadReferenceMeta() {
@@ -252,6 +264,40 @@ public final class AppState {
     private func regenerateCurrentPreset() {
         guard let spec = selectedItem else { return }
         currentStatsPreset = StatsPreset.make(scenario: currentScenario, for: spec)
+    }
+
+    /// Sauvegarde le preset courant en DB.
+    public func saveCurrentPreset() {
+        guard let preset = currentStatsPreset else { return }
+        do {
+            var p = preset
+            p.updatedAt = Date()
+            try presetRepository.save(p)
+            currentStatsPreset = p
+            refreshSavedPresets()
+            logger.info("Preset sauvegardé: \(p.name, privacy: .public)")
+        } catch {
+            logger.error("Save preset failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func loadPreset(_ preset: StatsPreset) {
+        currentStatsPreset = preset
+        currentScenario = preset.scenario
+        recomputeDecision()
+    }
+
+    public func deletePreset(_ preset: StatsPreset) {
+        do {
+            try presetRepository.delete(id: preset.id)
+            refreshSavedPresets()
+        } catch {
+            logger.error("Delete preset failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func refreshSavedPresets() {
+        savedPresets = (try? presetRepository.allPresets()) ?? []
     }
 
     /// Recalcule la décision à partir du snapshot courant + preset + spec.

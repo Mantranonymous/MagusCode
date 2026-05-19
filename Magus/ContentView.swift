@@ -181,10 +181,21 @@ private struct HomeView: View {
                     }
                 }
 
-                Card(title: "Presets (bientôt)") {
-                    Text("Bibliothèque de presets sauvegardés à venir.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                Card(title: "Presets sauvegardés") {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        if appState.savedPresets.isEmpty {
+                            Text("Aucun preset sauvegardé. Va sur Activité, choisis un item + un scénario, puis clique « Sauvegarder » pour le mettre ici.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        } else {
+                            ForEach(appState.savedPresets) { preset in
+                                presetRow(preset: preset)
+                                if preset.id != appState.savedPresets.last?.id {
+                                    Divider().background(Theme.Colors.border)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(minLength: Theme.Spacing.xxxl)
@@ -777,6 +788,9 @@ private struct HomeView: View {
                         .background(Theme.Colors.surfaceElev)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                         Spacer()
+                        MagusButton("Sauvegarder", icon: "square.and.arrow.down", style: .secondary) {
+                            appState.saveCurrentPreset()
+                        }
                     }
 
                     Divider().background(Theme.Colors.border)
@@ -819,6 +833,27 @@ private struct HomeView: View {
         }
         .sheet(isPresented: $showItemPicker) {
             ItemPickerSheet(appState: appState, isPresented: $showItemPicker)
+        }
+    }
+
+    private func presetRow(preset: StatsPreset) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preset.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("\(preset.scenario.displayName) · \(preset.targets.count) stats ciblées · maj \(preset.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            Spacer()
+            MagusButton("Utiliser", icon: "play.circle", style: .secondary) {
+                appState.loadPreset(preset)
+                appState.currentRoute = .activite
+            }
+            MagusButton("", icon: "trash", style: .ghost) {
+                appState.deletePreset(preset)
+            }
         }
     }
 

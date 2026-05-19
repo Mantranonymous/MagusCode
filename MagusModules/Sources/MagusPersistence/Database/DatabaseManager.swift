@@ -125,6 +125,29 @@ public final class DatabaseManager: @unchecked Sendable {
             try db.create(index: "idx_ref_item_effects_item", on: "ref_item_effects", columns: ["item_id"])
         }
 
+        migrator.registerMigration("v3_stats_presets") { db in
+            try db.create(table: "stats_presets") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull()
+                t.column("scenario", .text).notNull()
+                t.column("item_spec_id", .integer)
+                t.column("created_at", .datetime).notNull()
+                t.column("updated_at", .datetime).notNull()
+            }
+            try db.create(table: "stats_preset_targets") { t in
+                t.column("preset_id", .text)
+                    .notNull()
+                    .references("stats_presets", onDelete: .cascade)
+                t.column("characteristic_id", .integer).notNull()
+                t.column("target", .integer).notNull()
+                t.column("minimum", .integer)
+                t.column("priority", .integer).notNull().defaults(to: 100)
+                t.column("enabled", .integer).notNull().defaults(to: 1)
+                t.primaryKey(["preset_id", "characteristic_id"])
+            }
+            try db.create(index: "idx_stats_preset_targets_preset", on: "stats_preset_targets", columns: ["preset_id"])
+        }
+
         return migrator
     }
 }
