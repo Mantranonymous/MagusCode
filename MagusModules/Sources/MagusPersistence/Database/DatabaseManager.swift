@@ -69,6 +69,62 @@ public final class DatabaseManager: @unchecked Sendable {
             }
         }
 
+        migrator.registerMigration("v2_dofusdb_reference") { db in
+            try db.create(table: "ref_meta") { t in
+                t.column("key", .text).primaryKey()
+                t.column("value", .text).notNull()
+            }
+
+            try db.create(table: "ref_characteristics") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("keyword", .text)
+                t.column("name_fr", .text)
+                t.column("name_en", .text)
+                t.column("category_id", .integer)
+                t.column("visible", .integer).notNull().defaults(to: 1)
+            }
+
+            try db.create(table: "ref_item_types") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("super_type_id", .integer)
+                t.column("name_fr", .text)
+                t.column("name_en", .text)
+            }
+
+            try db.create(table: "ref_effects") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("characteristic_id", .integer)
+                t.column("description_fr", .text)
+                t.column("description_en", .text)
+                t.column("is_in_percent", .integer).notNull().defaults(to: 0)
+                t.column("boost", .integer).notNull().defaults(to: 0)
+            }
+            try db.create(index: "idx_ref_effects_char", on: "ref_effects", columns: ["characteristic_id"])
+
+            try db.create(table: "ref_items") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("type_id", .integer)
+                t.column("level", .integer)
+                t.column("name_fr", .text)
+                t.column("name_en", .text)
+                t.column("icon_id", .integer)
+                t.column("item_set_id", .integer)
+            }
+            try db.create(index: "idx_ref_items_type", on: "ref_items", columns: ["type_id"])
+            try db.create(index: "idx_ref_items_name_fr", on: "ref_items", columns: ["name_fr"])
+
+            try db.create(table: "ref_item_effects") { t in
+                t.column("item_id", .integer).notNull()
+                t.column("effect_id", .integer).notNull()
+                t.column("order_idx", .integer).notNull().defaults(to: 0)
+                t.column("dice_num", .double)
+                t.column("dice_side", .double)
+                t.column("base_effect_id", .integer)
+                t.primaryKey(["item_id", "effect_id", "order_idx"])
+            }
+            try db.create(index: "idx_ref_item_effects_item", on: "ref_item_effects", columns: ["item_id"])
+        }
+
         return migrator
     }
 }

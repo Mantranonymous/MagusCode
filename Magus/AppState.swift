@@ -5,6 +5,7 @@ import MagusCommon
 import MagusCore
 import MagusPerception
 import MagusPersistence
+import MagusReferenceData
 import SwiftUI
 import os
 
@@ -34,6 +35,8 @@ public final class AppState {
     public let windowFinder: WindowFinder
     public let screenCapture: ScreenCapture
     public let regionRepository: RegionRepository
+    public let referenceRepository: ReferenceRepository
+    public let referenceSync: ReferenceDataSync
 
     // State
     public var mode: Mode = .home
@@ -45,7 +48,21 @@ public final class AppState {
 
     // OCR test
     public var lastOCRSnapshot: RawOCRSnapshot?
+    public var lastParsedSnapshot: GameStateSnapshot?
+    public var lastStateDiff: StateDiff?
     public var isRunningOCR = false
+
+    // Fixture capture
+    public var lastFixturePath: URL?
+
+    // DofusDB sync
+    public var syncProgress: SyncProgress = SyncProgress(stage: .idle)
+    public var lastSyncAt: Date?
+    public var dofusDBVersion: String?
+    public var refStats: (chars: Int, items: Int, effects: Int) = (0, 0, 0)
+    public var isSyncingReference = false
+    public var lastSyncError: String?
+    public var characteristicsByID: [Int: RefCharacteristic] = [:]
 
     private var windowTrackingTask: Task<Void, Never>?
 
@@ -53,17 +70,80 @@ public final class AppState {
         self.permissions = PermissionManager()
         self.windowFinder = WindowFinder()
         self.screenCapture = ScreenCapture()
+        let db: DatabaseManager
         do {
-            let db = try DatabaseManager.makeDefault()
-            self.regionRepository = RegionRepository(database: db)
-            self.savedProfiles = (try? regionRepository.allProfiles()) ?? []
+            db = try DatabaseManager.makeDefault()
         } catch {
             logger.error("DatabaseManager init failed: \(error.localizedDescription, privacy: .public)")
-            // Fallback in-memory pour ne pas crasher
-            let db = try! DatabaseManager.makeInMemory()
-            self.regionRepository = RegionRepository(database: db)
+            db = try! DatabaseManager.makeInMemory()
         }
+        self.regionRepository = RegionRepository(database: db)
+        self.referenceRepository = ReferenceRepository(database: db)
+        self.referenceSync = ReferenceDataSync(
+            client: DofusDBClient(),
+            repository: self.referenceRepository
+        )
+        self.savedProfiles = (try? regionRepository.allProfiles()) ?? []
+        loadReferenceMeta()
         bootstrap()
+
+        // Lance la sync DofusDB en arrière-plan si nécessaire
+        Task { await self.checkAndSyncReference() }
+    }
+
+    private func loadReferenceMeta() {
+        dofusDBVersion = try? referenceRepository.getMeta(.dofusDBVersion)
+        if let s = try? referenceRepository.getMeta(.lastSyncAt) {
+            lastSyncAt = ISO8601DateFormatter().date(from: s)
+        }
+        refStats = (
+            chars: (try? referenceRepository.characteristicCount()) ?? 0,
+            items: (try? referenceRepository.itemCount()) ?? 0,
+            effects: (try? referenceRepository.effectCount()) ?? 0
+        )
+        if let all = try? referenceRepository.allCharacteristics() {
+            characteristicsByID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        }
+    }
+
+    /// Helper UI : résout le nom FR d'une stat depuis le cache.
+    public func displayName(for kind: StatKind) -> String {
+        characteristicsByID[kind.characteristicId]?.nameFR ?? "#\(kind.characteristicId)"
+    }
+
+    public func checkAndSyncReference() async {
+        let needs = (try? await referenceSync.needsSync()) ?? true
+        if needs {
+            await syncReference()
+        }
+    }
+
+    public func syncReference() async {
+        guard !isSyncingReference else { return }
+        await MainActor.run {
+            self.isSyncingReference = true
+            self.lastSyncError = nil
+        }
+        do {
+            try await referenceSync.sync { progress in
+                Task { @MainActor in
+                    self.syncProgress = progress
+                }
+            }
+            await MainActor.run {
+                self.loadReferenceMeta()
+                self.syncProgress = SyncProgress(stage: .done)
+            }
+        } catch {
+            logger.error("Reference sync failed: \(error.localizedDescription, privacy: .public)")
+            await MainActor.run {
+                self.lastSyncError = "\(error)"
+                self.syncProgress = SyncProgress(stage: .failed)
+            }
+        }
+        await MainActor.run {
+            self.isSyncingReference = false
+        }
     }
 
     private func bootstrap() {
@@ -173,8 +253,7 @@ public final class AppState {
         await startCalibration()
     }
 
-    /// Capture une nouvelle frame de Dofus et fait tourner l'OCR pipeline sur
-    /// toutes les régions du profil fourni. Stocke le résultat dans lastOCRSnapshot.
+    /// Capture une nouvelle frame de Dofus et fait tourner l'OCR pipeline puis les parsers.
     public func runOCRTest(profile: ResolutionProfile) async {
         guard let window = detectedWindow else { return }
         isRunningOCR = true
@@ -184,16 +263,136 @@ public final class AppState {
             let stream = try await screenCapture.start(windowID: window.windowID, rate: .idle)
             for await frame in stream {
                 let pipeline = OCRPipeline()
-                let snapshot = await pipeline.recognize(frame: frame, profile: profile)
+                let raw = await pipeline.recognize(frame: frame, profile: profile)
+                let dict = await buildStatDictionary()
+                let builder = SnapshotBuilder(dictionary: dict)
+                let parsed = builder.build(from: raw)
+                let previous = lastParsedSnapshot
+                let diff = previous.map { StateDiff(from: $0, to: parsed) }
+
                 await MainActor.run {
-                    self.lastOCRSnapshot = snapshot
+                    self.lastOCRSnapshot = raw
+                    self.lastParsedSnapshot = parsed
+                    self.lastStateDiff = diff
                 }
                 await screenCapture.stop()
-                logger.info("OCR test completed in \(snapshot.totalElapsedMs)ms for \(snapshot.results.count) regions")
+                logger.info("OCR+parse done in \(raw.totalElapsedMs)ms — \(parsed.item?.stats.count ?? 0) stats parsées")
                 return
             }
         } catch {
             logger.error("OCR test failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Construit le StatDictionary depuis les caractéristiques DofusDB stockées.
+    public func buildStatDictionary() async -> StatDictionary {
+        do {
+            let chars = try referenceRepository.allCharacteristics()
+            let entries: [(kind: StatKind, displayName: String)] = chars.compactMap { c in
+                guard let name = c.nameFR, !name.isEmpty, c.visible else { return nil }
+                return (StatKind(characteristicId: c.id), name)
+            }
+            return StatDictionary(referenceEntries: entries)
+        } catch {
+            logger.error("Failed to build StatDictionary: \(error.localizedDescription, privacy: .public)")
+            return StatDictionary(referenceEntries: [])
+        }
+    }
+
+    /// Capture une fixture : screenshot + OCR + skeleton expected JSON.
+    public func captureFixture(profile: ResolutionProfile) async {
+        guard let window = detectedWindow else { return }
+        do {
+            let stream = try await screenCapture.start(windowID: window.windowID, rate: .idle)
+            for await frame in stream {
+                let pipeline = OCRPipeline()
+                let raw = await pipeline.recognize(frame: frame, profile: profile)
+                let dict = await buildStatDictionary()
+                let builder = SnapshotBuilder(dictionary: dict)
+                let parsed = builder.build(from: raw)
+
+                let path = try writeFixture(frame: frame, raw: raw, parsed: parsed)
+                await MainActor.run {
+                    self.lastFixturePath = path
+                }
+                await screenCapture.stop()
+                logger.info("Fixture captured: \(path.path, privacy: .public)")
+                return
+            }
+        } catch {
+            logger.error("Capture fixture failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func writeFixture(frame: CaptureFrame, raw: RawOCRSnapshot, parsed: GameStateSnapshot) throws -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let stamp = formatter.string(from: Date())
+
+        // Cherche le dossier Tests/Fixtures dans le repo (utile pour dev).
+        // Fallback : Documents/MagusFixtures.
+        let baseURL: URL = {
+            let fileManager = FileManager.default
+            let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath)
+            let repoFixtures = URL(fileURLWithPath: "/Users/simonyeche/Desktop/perso/MagusCode/MagusModules/Tests/Fixtures")
+            if fileManager.fileExists(atPath: repoFixtures.path) {
+                return repoFixtures
+            }
+            return (try? fileManager.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent("MagusFixtures")) ?? cwd
+        }()
+
+        let dir = baseURL.appendingPathComponent(stamp)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        // 1) Screenshot PNG
+        if let rep = NSBitmapImageRep(cgImage: frame.image).representation(using: .png, properties: [:]) {
+            try rep.write(to: dir.appendingPathComponent("capture.png"))
+        }
+
+        // 2) OCR brut JSON
+        let ocrJSON: [String: Any] = [
+            "elapsedMs": raw.totalElapsedMs,
+            "regions": Dictionary(uniqueKeysWithValues: raw.results.map { (key, value) in
+                (key.rawValue, [
+                    "engine": value.engine,
+                    "elapsedMs": value.elapsedMs,
+                    "averageConfidence": value.averageConfidence,
+                    "text": value.joinedText,
+                    "observations": value.observations.map { o in
+                        ["text": o.text, "confidence": o.confidence]
+                    }
+                ] as [String: Any])
+            })
+        ]
+        let ocrData = try JSONSerialization.data(withJSONObject: ocrJSON, options: [.prettyPrinted, .sortedKeys])
+        try ocrData.write(to: dir.appendingPathComponent("ocr.json"))
+
+        // 3) Expected JSON (skeleton à éditer à la main)
+        let expectedSkeleton: [String: Any] = [
+            "_comment": "Édite manuellement ce fichier avec les valeurs attendues. Utilisé par les tests parsers.",
+            "item": [
+                "stats": parsed.item?.stats.map { s in
+                    [
+                        "characteristicId": s.kind.characteristicId,
+                        "value": s.value,
+                        "minValue": s.minValue as Any,
+                        "maxValue": s.maxValue as Any
+                    ] as [String: Any]
+                } ?? []
+            ],
+            "sink": parsed.sink?.percent as Any,
+            "jobLevel": parsed.jobLevel as Any,
+            "jobName": parsed.jobName as Any,
+            "historyCount": parsed.history.count
+        ]
+        let expData = try JSONSerialization.data(withJSONObject: expectedSkeleton, options: [.prettyPrinted, .sortedKeys])
+        try expData.write(to: dir.appendingPathComponent("expected.json"))
+
+        return dir
     }
 }

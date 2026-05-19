@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "MagusDecision", targets: ["MagusDecision"]),
         .library(name: "MagusExecution", targets: ["MagusExecution"]),
         .library(name: "MagusPersistence", targets: ["MagusPersistence"]),
+        .library(name: "MagusReferenceData", targets: ["MagusReferenceData"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -55,9 +56,24 @@ let package = Package(
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .target(
+            name: "MagusReferenceData",
+            dependencies: [
+                "MagusCore",
+                "MagusCommon",
+                "MagusPersistence",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .testTarget(
             name: "MagusCoreTests",
             dependencies: ["MagusCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "MagusPerceptionTests",
+            dependencies: ["MagusPerception", "MagusCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

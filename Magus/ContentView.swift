@@ -1,5 +1,6 @@
 import MagusCore
 import MagusPerception
+import MagusReferenceData
 import MagusUI
 import SwiftUI
 
@@ -89,6 +90,7 @@ private struct HomeView: View {
                     .padding(.top, Theme.Spacing.xxxl)
 
                 permissionsCard
+                referenceCard
                 dofusCard
                 profilesCard
                 if let profile = appState.savedProfiles.first(where: { $0.isComplete }) {
@@ -143,6 +145,104 @@ private struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var referenceCard: some View {
+        Card(title: "Données de référence (DofusDB)") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                HStack(spacing: Theme.Spacing.md) {
+                    StatusDot(state: refDotState, size: 10)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(refHeadline)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text(refSubheadline)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    MagusButton(
+                        appState.isSyncingReference ? "Sync en cours..." : "Resync",
+                        icon: "arrow.triangle.2.circlepath",
+                        style: .secondary,
+                        isDisabled: appState.isSyncingReference
+                    ) {
+                        Task { await appState.syncReference() }
+                    }
+                }
+
+                if appState.isSyncingReference {
+                    syncProgressBar
+                }
+
+                if let err = appState.lastSyncError {
+                    Text(err)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Colors.danger)
+                        .lineLimit(3)
+                }
+            }
+        }
+    }
+
+    private var refDotState: StatusDot.State {
+        if appState.isSyncingReference { return .current }
+        if appState.lastSyncError != nil { return .error }
+        if appState.refStats.chars == 0 { return .pending }
+        return .done
+    }
+
+    private var refHeadline: String {
+        if appState.isSyncingReference {
+            return "Synchronisation : \(stageLabel(appState.syncProgress.stage))"
+        }
+        if appState.refStats.chars == 0 {
+            return "Pas encore synchronisé"
+        }
+        return "Synchronisé — DofusDB \(appState.dofusDBVersion ?? "?")"
+    }
+
+    private var refSubheadline: String {
+        if appState.isSyncingReference {
+            let p = appState.syncProgress
+            if p.total > 0 {
+                return "\(p.fetched) / \(p.total)"
+            }
+            return "..."
+        }
+        let s = appState.refStats
+        if s.chars == 0 {
+            return "—"
+        }
+        let last = appState.lastSyncAt?.formatted(date: .abbreviated, time: .shortened) ?? "—"
+        return "\(s.chars) stats · \(s.effects) effets · \(s.items) items · maj \(last)"
+    }
+
+    private func stageLabel(_ stage: SyncProgress.Stage) -> String {
+        switch stage {
+        case .idle: return "—"
+        case .version: return "version"
+        case .characteristics: return "stats"
+        case .itemTypes: return "types d'items"
+        case .effects: return "effets"
+        case .items: return "items"
+        case .persisting: return "écriture SQLite"
+        case .done: return "OK"
+        case .failed: return "erreur"
+        }
+    }
+
+    private var syncProgressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Theme.Colors.surfaceElev)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Theme.Colors.accent)
+                    .frame(width: geo.size.width * appState.syncProgress.fraction)
+            }
+        }
+        .frame(height: 4)
     }
 
     private var dofusCard: some View {
@@ -206,19 +306,27 @@ private struct HomeView: View {
     }
 
     private func ocrTestCard(profile: ResolutionProfile) -> some View {
-        Card(title: "Test OCR — \(profile.name)") {
+        Card(title: "État détecté — \(profile.name)") {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
                     if let snap = appState.lastOCRSnapshot {
-                        Text("Dernier run : \(String(format: "%.1f", snap.totalElapsedMs)) ms · \(snap.results.count) régions")
+                        Text("Dernier run : \(String(format: "%.1f", snap.totalElapsedMs)) ms · OCR + parsing")
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(snap.totalElapsedMs < 200 ? Theme.Colors.success : Theme.Colors.warning)
                     } else {
-                        Text("Aucun run encore. Lance Dofus avec un item sur l'établi puis clique « Lancer OCR ».")
+                        Text("Pose un item sur l'établi puis clique « Lancer OCR ».")
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
                     Spacer()
+                    MagusButton(
+                        "Capturer fixture",
+                        icon: "camera.metering.matrix",
+                        style: .ghost,
+                        isDisabled: appState.isRunningOCR || appState.detectedWindow == nil
+                    ) {
+                        Task { await appState.captureFixture(profile: profile) }
+                    }
                     MagusButton(
                         appState.isRunningOCR ? "OCR en cours..." : "Lancer OCR",
                         icon: "text.viewfinder",
@@ -228,61 +336,168 @@ private struct HomeView: View {
                         Task { await appState.runOCRTest(profile: profile) }
                     }
                 }
-                if let snap = appState.lastOCRSnapshot {
+
+                if let fixture = appState.lastFixturePath {
+                    Text("Fixture sauvée : \(fixture.lastPathComponent)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.Colors.success)
+                }
+
+                if let snapshot = appState.lastParsedSnapshot {
                     Divider().background(Theme.Colors.border)
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        ForEach(RegionKind.allCases, id: \.self) { kind in
-                            ocrResultRow(kind: kind, result: snap.results[kind])
-                        }
+                    parsedSnapshotView(snapshot)
+                }
+
+                if let diff = appState.lastStateDiff, diff.hasChanges {
+                    Divider().background(Theme.Colors.border)
+                    stateDiffView(diff)
+                }
+            }
+        }
+    }
+
+    private func parsedSnapshotView(_ snapshot: GameStateSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            // Top row : sink + job + history count
+            HStack(spacing: Theme.Spacing.lg) {
+                metricChip(label: "Sink", value: snapshot.sink.map { "\($0.percent)%" } ?? "—")
+                metricChip(label: "Métier", value: snapshot.jobLevel.map { "\($0)" } ?? "—")
+                metricChip(label: "Historique", value: "\(snapshot.history.count)")
+                metricChip(label: "Stats", value: "\(snapshot.item?.stats.count ?? 0)")
+            }
+
+            // Stats parsées
+            if let stats = snapshot.item?.stats, !stats.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                        statRow(stat: stat)
+                    }
+                }
+            }
+
+            // History
+            if !snapshot.history.isEmpty {
+                Divider().background(Theme.Colors.border)
+                Text("Derniers combines")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .textCase(.uppercase)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(snapshot.history.suffix(5).enumerated()), id: \.offset) { _, h in
+                        historyRow(h)
                     }
                 }
             }
         }
     }
 
-    private func ocrResultRow(kind: RegionKind, result: RegionOCRResult?) -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(kind.shortName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    if kind.dataType == .visual {
-                        Text("visual")
-                            .font(.system(size: 9, weight: .semibold))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Theme.Colors.gold.opacity(0.25))
-                            .foregroundStyle(Theme.Colors.gold)
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                    }
-                }
-                if let r = result {
-                    Text("\(String(format: "%.1f", r.elapsedMs)) ms · conf \(String(format: "%.2f", r.averageConfidence))")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-            }
-            .frame(width: 100, alignment: .leading)
-
-            Group {
-                if kind.dataType == .visual {
-                    Text("Zone visuelle — analyse pixel à venir en P2/P3")
-                        .italic()
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                } else if let r = result {
-                    Text(r.joinedText)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                } else {
-                    Text("—")
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-            }
-            .font(.system(size: 11, design: .monospaced))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(4)
+    private func metricChip(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(Theme.Colors.textPrimary)
         }
-        .padding(.vertical, Theme.Spacing.xs)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(Theme.Colors.surfaceElev)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+    }
+
+    private func statRow(stat: Stat) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Text(appState.displayName(for: stat.kind))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .frame(width: 160, alignment: .leading)
+
+            Text("\(stat.value)")
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(stat.isAtMax ? Theme.Colors.gold : Theme.Colors.accent)
+                .frame(width: 50, alignment: .trailing)
+
+            if let min = stat.minValue, let max = stat.maxValue {
+                Text("(\(min) - \(max))")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                if let progress = stat.rangeProgress {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Theme.Colors.surfaceElev)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(stat.isAtMax ? Theme.Colors.gold : Theme.Colors.accent)
+                                .frame(width: geo.size.width * progress)
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            } else {
+                Spacer()
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func historyRow(_ h: MageHistoryEntry) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Circle()
+                .fill(historyColor(h.result))
+                .frame(width: 6, height: 6)
+            Text(h.delta > 0 ? "+\(h.delta)" : "\(h.delta)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(historyColor(h.result))
+                .frame(width: 32, alignment: .trailing)
+            if let stat = h.targetStat {
+                Text(appState.displayName(for: stat))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else {
+                Text(h.raw)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            Spacer()
+        }
+    }
+
+    private func historyColor(_ result: MageHistoryEntry.Result) -> Color {
+        switch result {
+        case .success: return Theme.Colors.success
+        case .failure: return Theme.Colors.danger
+        case .neutral: return Theme.Colors.textSecondary
+        case .unknown: return Theme.Colors.textTertiary
+        }
+    }
+
+    private func stateDiffView(_ diff: StateDiff) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Changements détectés")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+            ForEach(Array(diff.changes.enumerated()), id: \.offset) { _, change in
+                Text(describeChange(change))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.Colors.accent)
+            }
+        }
+    }
+
+    private func describeChange(_ change: StateDiff.Change) -> String {
+        switch change {
+        case .itemSwapped: return "→ item changé"
+        case .combineLanded(let entries): return "→ combine landed (\(entries.count) entrées)"
+        case .statChanged(let kind, let old, let new):
+            return "→ \(appState.displayName(for: kind)) : \(old) → \(new)"
+        case .sinkChanged(let old, let new):
+            return "→ sink : \(old)% → \(new)%"
+        case .jobLeveledUp(let old, let new):
+            return "→ métier : niveau \(old) → \(new)"
+        }
     }
 
     private var inspector: some View {

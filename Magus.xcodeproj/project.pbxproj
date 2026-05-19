@@ -18,6 +18,7 @@
 		4A0000000000000000000057 /* MagusDecision in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000094 /* MagusDecision */; };
 		4A0000000000000000000058 /* MagusExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000095 /* MagusExecution */; };
 		4A0000000000000000000059 /* MagusPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000096 /* MagusPersistence */; };
+		4A000000000000000000005B /* MagusReferenceData in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0000000000000000000097 /* MagusReferenceData */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 				4A0000000000000000000057 /* MagusDecision in Frameworks */,
 				4A0000000000000000000058 /* MagusExecution in Frameworks */,
 				4A0000000000000000000059 /* MagusPersistence in Frameworks */,
+				4A000000000000000000005B /* MagusReferenceData in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +103,7 @@
 				4A0000000000000000000094 /* MagusDecision */,
 				4A0000000000000000000095 /* MagusExecution */,
 				4A0000000000000000000096 /* MagusPersistence */,
+				4A0000000000000000000097 /* MagusReferenceData */,
 			);
 			productName = Magus;
 			productReference = 4A0000000000000000000023 /* Magus.app */;
@@ -335,6 +338,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
 			productName = MagusPersistence;
+		};
+		4A0000000000000000000097 /* MagusReferenceData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A0000000000000000000080 /* XCLocalSwiftPackageReference "MagusModules" */;
+			productName = MagusReferenceData;
 		};
 /* End XCSwiftPackageProductDependency section */
 
