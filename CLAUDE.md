@@ -41,7 +41,7 @@ Règle de dépendance : `UI → Core` uniquement. `Perception` et `Decision` ne 
 > **À MAINTENIR À JOUR** par Claude Code à chaque fin de phase.
 
 - [x] **Phase 0** — Foundations ✅ (2026-05-19)
-- [ ] **Phase 1** — Capture & OCR Pipeline
+- [x] **Phase 1** — Capture & OCR Pipeline ✅ (2026-05-19)
 - [ ] **Phase 2** — Domain Model & Parsing
 - [ ] **Phase 3** — Decision Engine
 - [ ] **Phase 4** — UI Foundation & Design System
@@ -109,7 +109,10 @@ xcodebuild -scheme Magus -configuration Debug build
 
 - **Phase 0 (2026-05-19)** : Structure validée — Magus.xcodeproj écrit manuellement (pas de xcodegen), local Swift package `MagusModules/` pour les 7 modules, GRDB 7.10.0 intégré. MLX Swift différé (ajout en P8 quand nécessaire). Swift 6.2.3 + Swift 5 language mode pour concurrency targeted. App build OK en Debug avec ad-hoc signing.
 - **Décision build CLI** : pour les builds en CLI, utiliser `xcodebuild -scheme Magus -configuration Debug build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO` (évite la signature qui demande un Apple Developer account).
+- **Phase 1 (2026-05-19)** : Capture + OCR opérationnels. PermissionManager + WindowFinder + ScreenCapture (SCK) + RegionRepository (GRDB) + Theme + CalibrationView (stylisée, drag-to-draw) + OCRPipeline (Vision, TaskGroup parallèle) + AppState wire-up. Dofus 3 (Unity) ciblé via `com.Ankama.Dofus`.
+- **Décision RegionKind** : 4 régions texte (Stats, Historique, Sink, Niveau métier) + 2 régions visuelles (RuneInventory, BarreXP). Les visuelles seront traitées par analyseur pixel en P2/P3, pas OCR. `OCRPipeline` filtre déjà via `kind.dataType == .text`.
+- **À faire en P2** : intégrer DofusDB (module `MagusReferenceData`, cache SQLite local + refresh hebdo) + parsers (stats/sink/jobLevel/history) + `GameStateSnapshot` + `StateDiff` + corrections OCR robustes.
 
 ---
 
-*Dernière mise à jour : fin Phase 0 — 2026-05-19*
+*Dernière mise à jour : fin Phase 1 — 2026-05-19*
