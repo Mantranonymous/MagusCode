@@ -35,7 +35,30 @@ public struct StatLineParser: Sendable {
         if leadingNumCount >= 3 {
             return parseColumnsFormat(line: cleaned, tokens: tokens)
         }
+        // **Cas spécifique Dofus 3** : l'icône de stat dans la colonne Effets cache
+        // parfois le chiffre `value` pour Vision OCR. On lit alors `Min Max Name [Pa] [Ra]`
+        // — 2 leading numbers + name + numbers de queue. Si on tombe dans
+        // parseSimpleFormat, on retourne value = Min (faux : c'est la valeur de Min, pas
+        // celle de la stat). On préfère retourner nil → SpecGuidedExtractor récupèrera
+        // la value via le contexte (pattern miroir négatif inclus).
+        if leadingNumCount == 2 && hasTrailingNumbersAfterName(tokens: tokens) {
+            return nil
+        }
         return parseSimpleFormat(line: cleaned)
+    }
+
+    /// Vrai si la ligne a au moins un nombre **après** le nom de la stat.
+    /// Signe d'un format colonnes (Pa/Ra counts) plutôt qu'un format simple `Value Name`.
+    private func hasTrailingNumbersAfterName(tokens: [String]) -> Bool {
+        var sawName = false
+        for tok in tokens {
+            if isWordToken(tok) {
+                sawName = true
+            } else if sawName, parseInt(tok) != nil {
+                return true
+            }
+        }
+        return false
     }
 
     private func countLeadingNumbers(in tokens: [String]) -> Int {
@@ -89,13 +112,20 @@ public struct StatLineParser: Sendable {
         // Le format colonnes a au minimum 3 nombres de tête (min, max, value)
         guard leadingNumbers.count >= 3, !nameTokens.isEmpty else { return nil }
 
-        let minV = leadingNumbers[0]
-        let maxV = leadingNumbers[1]
+        let rawMin = leadingNumbers[0]
+        let rawMax = leadingNumbers[1]
         let value = leadingNumbers[2]
         let name = nameTokens.joined(separator: " ")
 
-        // Sanity checks : min <= max et value plausible (incluant over)
-        guard minV <= maxV, minV >= 0, maxV <= 100_000 else { return nil }
+        // **Support des stats à valeur négative** (Tacle/Esquive/Fuite sur certains items).
+        // Dofus 3 affiche `Min` = moindre magnitude et `Max` = plus grande magnitude.
+        // Pour des valeurs négatives, ça donne min=-4 max=-6, donc rawMin > rawMax
+        // arithmétiquement. On normalise pour que minV ≤ maxV dans le modèle.
+        let minV = min(rawMin, rawMax)
+        let maxV = max(rawMin, rawMax)
+
+        // Sanity checks : range cohérent, value plausible (incluant over et négatives).
+        guard minV <= maxV, minV >= -10_000, maxV <= 100_000 else { return nil }
 
         // Présence de "%" → distingue résistance % vs fixe (et autres stats %)
         let hasPercent = line.contains("%")
@@ -161,9 +191,11 @@ public struct StatLineParser: Sendable {
 
     private func parseInt(_ token: String) -> Int? {
         // Un token "Int" pur ne contient que des chiffres (avec éventuellement
-        // +, -, ou un suffixe "%" qu'on ignore).
+        // +, -, U+2212 "MINUS SIGN" — Vision OCR le retourne parfois — ou un suffixe "%" qu'on ignore).
         guard !token.isEmpty else { return nil }
-        let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: "+%"))
+        let trimmed = token
+            .trimmingCharacters(in: CharacterSet(charactersIn: "+%"))
+            .replacingOccurrences(of: "\u{2212}", with: "-")  // unicode minus → ASCII
         guard trimmed.allSatisfy({ $0.isNumber || $0 == "-" }) else { return nil }
         return Int(trimmed)
     }
@@ -188,7 +220,8 @@ public struct StatLineParser: Sendable {
                     }
                     current = ""
                 }
-                negative = (c == "-")
+                // Accepte ASCII "-" et U+2212 "MINUS SIGN" (Vision OCR le retourne souvent).
+                negative = (c == "-" || c == "\u{2212}")
             }
         }
         if !current.isEmpty, let v = Int(current) {

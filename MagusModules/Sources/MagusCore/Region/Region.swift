@@ -28,23 +28,44 @@ public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
     case statsRaColumn
     /// Colonne Modif / runes base de la stats table (bande verticale fine).
     case statsBaseColumn
+    /// Cellule de la rune Ga Pa dans l'inventaire (pour poser un exo PA).
+    /// La stat PA n'apparaît pas dans la table FM si l'item n'a pas de PA natif,
+    /// donc on doit cliquer la rune directement depuis l'inventaire.
+    case runeSlotGaPa
+    /// Cellule de la rune Ga Pme dans l'inventaire (pour poser un exo PM).
+    case runeSlotGaPme
+    /// Cellule de la rune Po dans l'inventaire (pour poser un exo Portée).
+    case runeSlotPo
+    /// Cellule de la rune Pa Do Sort en inventaire (exo % Do Sort).
+    case runeSlotPaDoSort
+    /// Cellule de la rune Pa Do Distance en inventaire (exo % Do Distance).
+    case runeSlotPaDoDistance
+    /// Bouton "Fusionner" du panneau Joaillomager. Après avoir sélectionné une
+    /// rune en inventaire pour un exo, il faut cliquer ce bouton pour valider
+    /// la fusion — Dofus 3 ne pose pas la rune sur double-clic depuis l'inventaire.
+    case fuserButton
 
     public var dataType: RegionDataType {
         switch self {
         case .stats, .history, .reliquat, .jobLevel:
             return .text
-        case .runeInventory, .xpBar, .statsPaColumn, .statsRaColumn, .statsBaseColumn:
+        case .runeInventory, .xpBar, .statsPaColumn, .statsRaColumn, .statsBaseColumn,
+             .runeSlotGaPa, .runeSlotGaPme, .runeSlotPo,
+             .runeSlotPaDoSort, .runeSlotPaDoDistance, .fuserButton:
             return .visual
         }
     }
 
     /// Vrai si cette région est strictement nécessaire pour le pipeline OCR.
-    /// Les régions optionnelles (colonnes click) ne bloquent pas isComplete.
+    /// Les régions optionnelles (colonnes click, slots inventaire) ne bloquent pas isComplete.
     public var isRequired: Bool {
         switch self {
         case .stats, .history, .reliquat, .jobLevel: return true
         case .runeInventory, .xpBar: return false
         case .statsPaColumn, .statsRaColumn, .statsBaseColumn: return false
+        case .runeSlotGaPa, .runeSlotGaPme, .runeSlotPo: return false
+        case .runeSlotPaDoSort, .runeSlotPaDoDistance: return false
+        case .fuserButton: return false
         }
     }
 
@@ -59,6 +80,12 @@ public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .statsPaColumn: return "Colonne Pa (pour click auto)"
         case .statsRaColumn: return "Colonne Ra (pour click auto)"
         case .statsBaseColumn: return "Colonne Modif/base (pour click auto)"
+        case .runeSlotGaPa: return "Rune Ga PA en inventaire (exo PA)"
+        case .runeSlotGaPme: return "Rune Ga PME en inventaire (exo PM)"
+        case .runeSlotPo: return "Rune Po en inventaire (exo Portée)"
+        case .runeSlotPaDoSort: return "Rune Pa Do Sort en inventaire (exo % Sort)"
+        case .runeSlotPaDoDistance: return "Rune Pa Do Distance en inventaire (exo % Distance)"
+        case .fuserButton: return "Bouton Fusionner (valide la rune exo sélectionnée)"
         }
     }
 
@@ -73,6 +100,12 @@ public enum RegionKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .statsPaColumn: return "Col Pa"
         case .statsRaColumn: return "Col Ra"
         case .statsBaseColumn: return "Col Modif"
+        case .runeSlotGaPa: return "Slot Ga PA"
+        case .runeSlotGaPme: return "Slot Ga PME"
+        case .runeSlotPo: return "Slot Po"
+        case .runeSlotPaDoSort: return "Slot Pa Do Sort"
+        case .runeSlotPaDoDistance: return "Slot Pa Do Dist"
+        case .fuserButton: return "Fusionner"
         }
     }
 }

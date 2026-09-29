@@ -39,19 +39,30 @@ public struct StatDictionary: Sendable {
         "crit": "critique",
         "cc": "coups critiques",
 
-        // Résistances en % (avec "%" dans la ligne OCR)
+        // Résistances en % (avec "%" dans la ligne OCR) — singulier ET pluriel
+        // (Dofus 3 écrit "Résistances Terre" au pluriel dans la table FM).
         "résistance neutre %": "Neutre (%)",
         "résistance terre %": "Terre (%)",
         "résistance feu %": "Feu (%)",
         "résistance eau %": "Eau (%)",
         "résistance air %": "Air (%)",
+        "résistances neutre %": "Neutre (%)",
+        "résistances terre %": "Terre (%)",
+        "résistances feu %": "Feu (%)",
+        "résistances eau %": "Eau (%)",
+        "résistances air %": "Air (%)",
 
-        // Résistances fixes (sans "%" dans la ligne OCR)
+        // Résistances fixes (sans "%" dans la ligne OCR) — singulier ET pluriel
         "résistance neutre": "Neutre (fixe)",
         "résistance terre": "Terre (fixe)",
         "résistance feu": "Feu (fixe)",
         "résistance eau": "Eau (fixe)",
         "résistance air": "Air (fixe)",
+        "résistances neutre": "Neutre (fixe)",
+        "résistances terre": "Terre (fixe)",
+        "résistances feu": "Feu (fixe)",
+        "résistances eau": "Eau (fixe)",
+        "résistances air": "Air (fixe)",
 
         // Avec le % devant (pas standard mais possible)
         "% résistance neutre": "Neutre (%)",
@@ -71,6 +82,12 @@ public struct StatDictionary: Sendable {
         "dommages eau": "Eau",
         "dommages air": "Air",
         "dommages neutre": "Neutre",
+
+        // Dommages Critiques : DofusDB stocke "Critiques" (cid 86) tout court,
+        // mais Dofus 3 écrit "Dommages Critiques" dans la table FM.
+        // Sans cet alias, le lookup échoue et SpecGuided chope le mauvais nombre.
+        "dommages critiques": "Critiques",
+        "dommage critique": "Critiques",
     ]
 
     public init(referenceEntries: [(kind: StatKind, displayName: String)], aliases: [String: String] = defaultAliases) {

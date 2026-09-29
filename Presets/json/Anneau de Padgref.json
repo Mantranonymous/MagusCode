@@ -1,0 +1,142 @@
+{
+  "_efitem_notes": {
+    "extractedFromBinary": 12,
+    "missingFromBinary": "ExoFast n'exporte pas les stats négatives (Tacle, Esquive) ni les stats fixes 1-1 sans cible custom (Portée)"
+  },
+  "config": {
+    "alternateExoPAPM": false,
+    "createdAt": "2026-05-20T12:46:10.631828+00:00",
+    "defaultRule": {
+      "maxCanHit": 9999,
+      "paValueThreshold": "always",
+      "raValueThreshold": "always",
+      "thresholdPA": 20,
+      "thresholdRA": 60,
+      "useBase": true,
+      "usePA": true,
+      "useRA": true
+    },
+    "id": "42E62510-F7A3-4338-845A-A4A0A447C8E6",
+    "name": "Rapide (règle ×20)",
+    "updatedAt": "2026-05-20T12:46:10.631828+00:00"
+  },
+  "exportedAt": "2026-05-20T12:46:10.631828+00:00",
+  "format": "magus.preset",
+  "item": {
+    "dofusDbId": null,
+    "name": "Anneau de Padgref"
+  },
+  "source": {
+    "originalFile": "Anneau de Padgref.efitem",
+    "tool": "Presets/convert_efitem.py",
+    "type": "efitem_conversion"
+  },
+  "stats": {
+    "createdAt": "2026-05-20T12:46:10.631828+00:00",
+    "id": "AC4A93F4-2E81-4E58-92D5-A0EAB53D4610",
+    "itemSpecId": null,
+    "name": "Importé ExoFast — Anneau de Padgref",
+    "scenario": "jetParfait",
+    "steps": [],
+    "targets": [
+      {
+        "characteristicId": 11,
+        "characteristicName": "Vitalité",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 96
+      },
+      {
+        "characteristicId": 12,
+        "characteristicName": "Sagesse",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 30
+      },
+      {
+        "characteristicId": 14,
+        "characteristicName": "Agilité",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 54
+      },
+      {
+        "characteristicId": 15,
+        "characteristicName": "Intelligence",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 54
+      },
+      {
+        "characteristicId": 18,
+        "characteristicName": "Critique",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 6
+      },
+      {
+        "characteristicId": 26,
+        "characteristicName": "Invocation",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 1
+      },
+      {
+        "characteristicId": 35,
+        "characteristicName": "Résistance Eau %",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 8
+      },
+      {
+        "characteristicId": 54,
+        "characteristicName": "Résistance Terre",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 7
+      },
+      {
+        "characteristicId": 57,
+        "characteristicName": "Résistance Air",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 7
+      },
+      {
+        "characteristicId": 86,
+        "characteristicName": "Dommages Critiques",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 11
+      },
+      {
+        "characteristicId": 89,
+        "characteristicName": "Dommages Feu",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 6
+      },
+      {
+        "characteristicId": 91,
+        "characteristicName": "Dommages Air",
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 6
+      }
+    ],
+    "updatedAt": "2026-05-20T12:46:10.631828+00:00"
+  },
+  "version": 1
+}

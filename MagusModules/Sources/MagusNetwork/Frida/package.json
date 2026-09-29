@@ -1,0 +1,21 @@
+{
+  "name": "magus-frida-helper",
+  "version": "0.1.0",
+  "description": "Spawn Dofus.app + hook libc connect() pour rediriger vers le proxy local Magus. Observation passive uniquement.",
+  "type": "module",
+  "main": "frida-spawn-dofus.js",
+  "bin": {
+    "magus-frida-helper": "frida-spawn-dofus.js"
+  },
+  "scripts": {
+    "start": "node frida-spawn-dofus.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "frida": "^16.0.0"
+  },
+  "private": true
+}

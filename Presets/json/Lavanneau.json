@@ -1,0 +1,107 @@
+{
+  "_originalFile": "Anneau de Padgref.efitem",
+  "_source": "efitem_conversion",
+  "config": {
+    "alternateExoPAPM": false,
+    "createdAt": "2026-05-20T12:41:38.551982+00:00",
+    "defaultRule": {
+      "maxCanHit": 9999,
+      "paValueThreshold": {
+        "always": {}
+      },
+      "raValueThreshold": {
+        "always": {}
+      },
+      "thresholdPA": 20,
+      "thresholdRA": 60,
+      "useBase": true,
+      "usePA": true,
+      "useRA": true
+    },
+    "id": "2E8BFFBA-245F-43BD-A7CE-E1A1ECBF51CD",
+    "name": "Rapide (règle ×20)",
+    "rules": {},
+    "updatedAt": "2026-05-20T12:41:38.551982+00:00"
+  },
+  "exportedAt": "2026-05-20T12:41:38.551982+00:00",
+  "format": "magus.preset",
+  "stats": {
+    "_parsedItemName": "Lavanneau",
+    "_targetsList": [
+      {
+        "characteristicId": 11,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 240
+      },
+      {
+        "characteristicId": 12,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 30
+      },
+      {
+        "characteristicId": 13,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 54
+      },
+      {
+        "characteristicId": 15,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 54
+      },
+      {
+        "characteristicId": 35,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 10
+      },
+      {
+        "characteristicId": 49,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 10
+      },
+      {
+        "characteristicId": 91,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 11
+      },
+      {
+        "characteristicId": 92,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 11
+      }
+    ],
+    "createdAt": "2026-05-20T12:41:38.551982+00:00",
+    "id": "50E4A48F-FCA5-428F-BB72-8B2F8DB0C5A8",
+    "itemSpecId": null,
+    "name": "Importé ExoFast — Lavanneau",
+    "scenario": "jetParfait",
+    "steps": [],
+    "targetsRaw": {
+      "11": 240,
+      "12": 30,
+      "13": 54,
+      "15": 54,
+      "35": 10,
+      "49": 10,
+      "91": 11,
+      "92": 11
+    },
+    "updatedAt": "2026-05-20T12:41:38.551982+00:00"
+  },
+  "version": 1
+}

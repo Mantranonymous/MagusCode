@@ -17,17 +17,25 @@ public struct StatTarget: Hashable, Codable, Sendable {
 
 /// Scénario de FM. Détermine quelle stratégie utiliser et comment auto-générer le preset.
 public enum PresetScenario: String, Codable, CaseIterable, Sendable {
-    case jetParfait     // toutes les stats au max théorique
-    case exoPA          // tente d'ajouter un PA exotique
-    case exoPM          // tente d'ajouter un PM exotique
-    case overVita       // jet parfait + over Vitalité
-    case leveling       // maximise XP métier — clique des grosses runes en boucle
+    case jetParfait        // toutes les stats au max théorique
+    case exoPA             // tente d'ajouter un PA exotique
+    case exoPM             // tente d'ajouter un PM exotique
+    case exoDoSort1        // tente +1% Dommages Sorts (characteristicId 123)
+    case exoDoSort2        // tente +2% Dommages Sorts
+    case exoDoDistance1    // tente +1% Dommages Distance (characteristicId 120)
+    case exoDoDistance2    // tente +2% Dommages Distance
+    case overVita          // jet parfait + over Vitalité
+    case leveling          // maximise XP métier — clique des grosses runes en boucle
 
     public var displayName: String {
         switch self {
         case .jetParfait: return "Jet parfait"
         case .exoPA: return "Exo PA"
         case .exoPM: return "Exo PM"
+        case .exoDoSort1: return "Exo +1% Do Sort"
+        case .exoDoSort2: return "Exo +2% Do Sort"
+        case .exoDoDistance1: return "Exo +1% Do Distance"
+        case .exoDoDistance2: return "Exo +2% Do Distance"
         case .overVita: return "Over Vitalité"
         case .leveling: return "Leveling XP"
         }
@@ -38,19 +46,57 @@ public enum PresetScenario: String, Codable, CaseIterable, Sendable {
         case .jetParfait: return "JP"
         case .exoPA: return "Exo PA"
         case .exoPM: return "Exo PM"
+        case .exoDoSort1: return "+1% Sort"
+        case .exoDoSort2: return "+2% Sort"
+        case .exoDoDistance1: return "+1% Dist"
+        case .exoDoDistance2: return "+2% Dist"
         case .overVita: return "Over Vita"
         case .leveling: return "Leveling"
         }
     }
+
+    /// Pour les scénarios exo, retourne (characteristicId, targetValue).
+    public var exoTarget: (characteristicId: Int, target: Int)? {
+        switch self {
+        case .exoPA: return (1, 1)
+        case .exoPM: return (23, 1)
+        case .exoDoSort1: return (123, 1)
+        case .exoDoSort2: return (123, 2)
+        case .exoDoDistance1: return (120, 1)
+        case .exoDoDistance2: return (120, 2)
+        default: return nil
+        }
+    }
+}
+
+/// Une étape de FM dans un preset multi-étapes (inspiré ExoFast).
+/// MVP : seul le type "Cibles" est supporté. Les étapes Conditions / Conditions+puit
+/// arriveront plus tard.
+public struct PresetStep: Hashable, Codable, Sendable, Identifiable {
+    public let id: UUID
+    public var name: String
+    public var targets: [StatKind: StatTarget]
+
+    public init(id: UUID = UUID(), name: String, targets: [StatKind: StatTarget] = [:]) {
+        self.id = id
+        self.name = name
+        self.targets = targets
+    }
 }
 
 /// Preset utilisateur : pour cet item, quelles sont les cibles par stat.
+///
+/// Deux modes :
+/// - **Single-step** (legacy) : `targets` non vide, `steps` vide → comportement actuel
+/// - **Multi-step** (ExoFast-style) : `steps` non vide → DecisionEngine itère sur chaque étape
 public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
     public let id: UUID
     public var name: String
     public var scenario: PresetScenario
     public var itemSpecId: Int?
     public var targets: [StatKind: StatTarget]
+    /// Étapes séquentielles. Si non vide, prend le dessus sur `targets`.
+    public var steps: [PresetStep]
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -60,6 +106,7 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
         scenario: PresetScenario = .jetParfait,
         itemSpecId: Int? = nil,
         targets: [StatKind: StatTarget] = [:],
+        steps: [PresetStep] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -68,9 +115,27 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
         self.scenario = scenario
         self.itemSpecId = itemSpecId
         self.targets = targets
+        self.steps = steps
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    /// Targets effectives à utiliser pour la décision, selon l'étape courante.
+    /// Fallback sur `targets` legacy si pas de steps.
+    public func effectiveTargets(at stepIndex: Int) -> [StatKind: StatTarget] {
+        if steps.isEmpty { return targets }
+        guard stepIndex >= 0, stepIndex < steps.count else { return [:] }
+        return steps[stepIndex].targets
+    }
+
+    /// Nom de l'étape courante, ou vide si single-step.
+    public func stepName(at index: Int) -> String? {
+        guard index >= 0, index < steps.count else { return nil }
+        return steps[index].name
+    }
+
+    public var isMultiStep: Bool { !steps.isEmpty }
+    public var stepCount: Int { steps.count }
 
     /// Génère un preset selon le scénario choisi.
     public static func make(scenario: PresetScenario, for spec: ItemSpec) -> StatsPreset {
@@ -78,9 +143,60 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
         case .jetParfait: return perfectJet(for: spec)
         case .exoPA: return exoPA(for: spec)
         case .exoPM: return exoPM(for: spec)
+        case .exoDoSort1: return exoCustom(scenario: .exoDoSort1, characteristicId: 123, target: 1, label: "+1% Do Sort", for: spec)
+        case .exoDoSort2: return exoCustom(scenario: .exoDoSort2, characteristicId: 123, target: 2, label: "+2% Do Sort", for: spec)
+        case .exoDoDistance1: return exoCustom(scenario: .exoDoDistance1, characteristicId: 120, target: 1, label: "+1% Do Distance", for: spec)
+        case .exoDoDistance2: return exoCustom(scenario: .exoDoDistance2, characteristicId: 120, target: 2, label: "+2% Do Distance", for: spec)
         case .overVita: return overVita(for: spec)
         case .leveling: return leveling(for: spec)
         }
+    }
+
+    /// Génère un preset exo générique pour une stat non native (Do Sort, Do Distance, etc.).
+    /// Toutes les stats natives sont poussées au max (tampon sacrificiel) + cible exo en plus.
+    public static func exoCustom(
+        scenario: PresetScenario,
+        characteristicId: Int,
+        target: Int,
+        label: String,
+        for spec: ItemSpec
+    ) -> StatsPreset {
+        var targets: [StatKind: StatTarget] = [:]
+        // Stats natives au max (tampon sacrificiel pour exo)
+        for s in spec.stats {
+            let value: Int
+            var priority: Int
+            if s.hasVariableRange {
+                value = s.maxValue
+                priority = 80
+            } else if s.isOverable {
+                value = s.maxValue + 1
+                priority = 90
+            } else {
+                value = s.maxValue
+                priority = 50
+            }
+            targets[s.kind] = StatTarget(
+                target: value,
+                minimum: s.minValue,
+                priority: priority,
+                enabled: true
+            )
+        }
+        // Cible exo : caractéristique non native avec target = pourcentage souhaité
+        let exoKind = StatKind(characteristicId: characteristicId)
+        targets[exoKind] = StatTarget(
+            target: target,
+            minimum: nil,
+            priority: 120,  // top priorité
+            enabled: true
+        )
+        return StatsPreset(
+            name: "Exo \(label) — \(spec.name)",
+            scenario: scenario,
+            itemSpecId: spec.id,
+            targets: targets
+        )
     }
 
     /// Leveling : on s'en fout du jet, on veut maximiser XP. Toutes les stats mageables
@@ -103,14 +219,37 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
         )
     }
 
-    /// Jet parfait : chaque stat mageable a target = maxValue, priorité 100.
+    /// Jet parfait : pour chaque stat de l'item, target + priorité adaptées.
+    /// Priorités :
+    /// - 120 : PA / PM (irremplaçables une fois perdus → top priorité)
+    /// - 110 : Portée / Invocation (overable précieux)
+    /// - 100 : stats avec variance (Vita, Fo, Sa, etc.)
+    /// - 60  : stats fixes 1-1 (maintien seulement)
     public static func perfectJet(for spec: ItemSpec) -> StatsPreset {
         var targets: [StatKind: StatTarget] = [:]
-        for s in spec.stats where s.isMageable {
+        for s in spec.stats {
+            let target: Int
+            var priority: Int
+            if s.hasVariableRange {
+                target = s.maxValue
+                priority = 100
+            } else if s.isOverable {
+                // Overable (PO/Invo) : target = max + 1 et priorité haute car ces stats
+                // sont coûteuses à remettre si elles tombent.
+                target = s.maxValue + 1
+                priority = 110
+            } else {
+                target = s.maxValue
+                priority = 60
+            }
+            // PA / PM : priorité absolue. Si elles tombent, on les remet en premier.
+            if s.kind.characteristicId == 1 || s.kind.characteristicId == 23 {
+                priority = 120
+            }
             targets[s.kind] = StatTarget(
-                target: s.maxValue,
+                target: target,
                 minimum: s.minValue,
-                priority: 100,
+                priority: priority,
                 enabled: true
             )
         }
@@ -119,6 +258,41 @@ public struct StatsPreset: Hashable, Codable, Sendable, Identifiable {
             scenario: .jetParfait,
             itemSpecId: spec.id,
             targets: targets
+        )
+    }
+
+    /// Génère un `ConfigPreset` avec des seuils Pa/Ra smart par stat,
+    /// inspiré des règles ExoFast (ex: "Ra Age entre 45 et 50").
+    ///
+    /// Convention :
+    /// - Pa from current ≥ 10 (early Pa pour économiser)
+    /// - Ra entre (max - raBonus) et (max - 1) — fenêtre étroite pour éviter overs
+    public static func smartConfig(for spec: ItemSpec, baseName: String = "Smart") -> ConfigPreset {
+        var rules: [StatKind: ConfigRule] = [:]
+        for s in spec.stats where s.hasVariableRange {
+            guard let raBonus = RuneWeights.bonusPoints(for: s.kind, power: .ra) else { continue }
+            let maxV = s.maxValue
+            // Pa : activée dès qu'on a 10+ de stat (sous 10 → on pose des base)
+            let paFrom = min(10, maxV / 6)
+            // Ra : fenêtre étroite près du max, taille = max - raBonus à max - 1
+            // Ex: Force max 60, raBonus 10 → Ra entre 50 et 59
+            let raStart = max(paFrom + 1, maxV - raBonus)
+            let raEnd = max(raStart + 1, maxV - 1)
+            rules[s.kind] = ConfigRule(
+                useBase: true,
+                usePA: true,
+                useRA: true,
+                thresholdPA: 20,
+                thresholdRA: 60,
+                paValueThreshold: .from(paFrom),
+                raValueThreshold: .between(raStart, raEnd)
+            )
+        }
+        return ConfigPreset(
+            name: "\(baseName) — \(spec.name)",
+            rules: rules,
+            defaultRule: .default,
+            alternateExoPAPM: false
         )
     }
 

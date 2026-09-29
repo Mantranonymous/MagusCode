@@ -25,12 +25,15 @@ public struct SpecGuidedExtractor: Sendable {
             guard let nameRange = findNameRange(for: statSpec, in: tokens) else {
                 continue
             }
-            let value = findNearbyValue(
+            // **Pas de fallback à 0** : si on n'arrive pas à lire la valeur, on saute
+            // la stat plutôt que de la fabriquer. Sinon une stat à -4 (Tacle, etc.)
+            // dont la valeur OCR foire serait vue comme 0 → le moteur tenterait de la mager.
+            guard let value = findNearbyValue(
                 aroundRange: nameRange,
                 tokens: tokens,
                 expectedMin: statSpec.minValue,
                 expectedMax: statSpec.maxValue
-            ) ?? 0  // si on a trouvé le nom mais pas de nombre proche, on suppose 0
+            ) else { continue }
 
             result.append(Stat(
                 kind: statSpec.kind,
@@ -83,40 +86,93 @@ public struct SpecGuidedExtractor: Sendable {
         expectedMin: Int,
         expectedMax: Int
     ) -> Int? {
-        let radius = 4
+        // DofusDB encode certaines stats en magnitude positive même si l'item les
+        // applique en négatif (Tacle, Fuite, Esquive PA/PM, parfois Prospection).
+        // On accepte donc les valeurs lues côté OCR dans `[expectedMin, expectedMax]`
+        // ET dans `[-expectedMax, -expectedMin]` (le miroir).
+        let mirrorMin = -expectedMax
+        let mirrorMax = -expectedMin
+        func matchesSpecOrMirror(_ a: Int, _ b: Int) -> Bool {
+            (a == expectedMin && b == expectedMax) || (a == mirrorMin && b == mirrorMax)
+        }
+
+        // 1. Pattern Dofus 3 strict : `[Min] [Max] [Value] [Name]`
+        //    Ex : "21 30 30 Agilité" → Value = 30 (3ème).
+        //    Ex négatif : "-4 -6 -6 Tacle" — match miroir car spec dit 4-6.
+        let nameStart = range.lowerBound
+        if nameStart >= 3,
+           let n1 = parseSignedInt(tokens[nameStart - 3]),
+           let n2 = parseSignedInt(tokens[nameStart - 2]),
+           let n3 = parseSignedInt(tokens[nameStart - 1]),
+           matchesSpecOrMirror(n1, n2) {
+            return n3
+        }
+
+        // 2. Pattern simple : `[Value] [Name]` immédiatement adjacent.
+        //    On **exclut explicitement les boundaries** (expectedMin/max et leurs miroirs)
+        //    — sinon dans le format Dofus 3 "Min Max Name" (icône cache la value),
+        //    on prendrait Max comme value, ce qui donnerait par ex. Résistance Air 10
+        //    au lieu de 0.
+        if nameStart >= 1,
+           let v = parseSignedInt(tokens[nameStart - 1]),
+           v != expectedMin, v != expectedMax,
+           v != mirrorMin, v != mirrorMax {
+            let plausiblePos = (expectedMin - 5)...(expectedMax + abs(expectedMax) + 50)
+            let plausibleNeg = (mirrorMin - 50 - abs(mirrorMin))...(mirrorMax + 5)
+            if plausiblePos.contains(v) || plausibleNeg.contains(v) {
+                return v
+            }
+        }
+
+        // 3. Fallback radius — chercher dans un voisinage.
+        // **Préfère les nombres AVANT le nom** : en Dofus 3, la value est dans la
+        // colonne Effets (juste avant le nom). Les nombres APRÈS sont Modif/Pa/Ra
+        // (donc -3 en colonne Modif peut être proche mais n'est PAS la value).
+        // On ne regarde APRÈS que si rien n'a été trouvé avant.
+        let radius = 6
         let lo = max(0, range.lowerBound - radius)
         let hi = min(tokens.count - 1, range.upperBound + radius)
         guard lo <= hi else { return nil }
 
-        // Range tolérée : autorise un peu d'over par rapport au max théorique,
-        // et autorise les valeurs proches de 0 (stat "0 X" très fréquent).
         let extendedMax = max(expectedMax, expectedMax + abs(expectedMax) + 50)
-        let extendedMin: Int
-        if expectedMin < 0 {
-            extendedMin = expectedMin - 20
-        } else {
-            extendedMin = 0
-        }
-        let acceptedRange = extendedMin...extendedMax
+        let extendedMin: Int = expectedMin < 0 ? expectedMin - 20 : 0
+        let acceptedPos = extendedMin...extendedMax
+        let acceptedNeg = (mirrorMin - 50 - abs(mirrorMin))...max(mirrorMax, 0)
 
-        var inRangeCandidates: [(distance: Int, value: Int)] = []
-        for i in lo...hi where !range.contains(i) {
+        // Filtre commun : accepte v si dans la fenêtre attendue (positive ou miroir)
+        // et n'est pas un boundary trivial (min/max attendu).
+        func isCandidate(_ v: Int) -> Bool {
+            if v == expectedMin || v == expectedMax { return false }
+            if v == mirrorMin || v == mirrorMax { return false }
+            return acceptedPos.contains(v) || acceptedNeg.contains(v)
+        }
+
+        // Phase A : balayage AVANT le nom uniquement (colonne Effets en Dofus 3)
+        var beforeCandidates: [(distance: Int, value: Int)] = []
+        for i in lo..<range.lowerBound {
             guard let v = parseSignedInt(tokens[i]) else { continue }
-            // Évite de prendre min ou max théoriques comme value
-            if v == expectedMin || v == expectedMax { continue }
-            guard acceptedRange.contains(v) else { continue }
-            let dist = abs(i - range.lowerBound)
-            inRangeCandidates.append((dist, v))
+            guard isCandidate(v) else { continue }
+            beforeCandidates.append((range.lowerBound - i, v))
+        }
+        if let best = beforeCandidates.sorted(by: { $0.distance < $1.distance }).first {
+            return best.value
         }
 
-        // Si rien dans la range → on ne devine pas. Le caller default à 0
-        // (cas typique : stat à 0 dont l'OCR n'a pas capté le chiffre).
-        guard !inRangeCandidates.isEmpty else { return nil }
-        return inRangeCandidates.sorted(by: { $0.distance < $1.distance }).first?.value
+        // Phase B : fallback APRÈS le nom (Modif/Pa/Ra) — seulement si rien avant.
+        // C'est moins fiable mais permet de quand même remonter quelque chose.
+        var afterCandidates: [(distance: Int, value: Int)] = []
+        for i in (range.upperBound + 1)...hi where i < tokens.count {
+            guard let v = parseSignedInt(tokens[i]) else { continue }
+            guard isCandidate(v) else { continue }
+            afterCandidates.append((i - range.upperBound, v))
+        }
+        return afterCandidates.sorted(by: { $0.distance < $1.distance }).first?.value
     }
 
     private func parseSignedInt(_ token: String) -> Int? {
-        let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: "+%"))
+        let trimmed = token
+            .trimmingCharacters(in: CharacterSet(charactersIn: "+%"))
+            .replacingOccurrences(of: "\u{2212}", with: "-")  // U+2212 → ASCII
         guard trimmed.allSatisfy({ $0.isNumber || $0 == "-" }) else { return nil }
         return Int(trimmed)
     }

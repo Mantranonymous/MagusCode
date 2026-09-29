@@ -26,7 +26,10 @@ public struct SnapshotBuilder: Sendable {
         var jobLevel: Int? = nil
         var jobName: String? = nil
 
-        if let statsText = raw.results[.stats]?.joinedText {
+        // Stats : on regroupe par ligne visuelle (Y proches) pour reconstituer les rows
+        // de la table FM. Vision sépare souvent les colonnes en observations distinctes.
+        if let statsRegion = raw.results[.stats] {
+            let statsText = statsRegion.rowGroupedText
             stats = statParser.parseAll(text: statsText)
         }
         if let historyText = raw.results[.history]?.joinedText {

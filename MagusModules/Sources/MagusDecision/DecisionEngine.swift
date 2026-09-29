@@ -28,7 +28,8 @@ public struct DecisionEngine: Sendable {
         preset: PresetBundle,
         spec: ItemSpec?
     ) -> Decision {
-        switch preset.stats.scenario {
+        let scenario = preset.stats.scenario
+        switch scenario {
         case .jetParfait, .overVita:
             return maging.decide(snapshot: snapshot, preset: preset, spec: spec)
         case .exoPA:
@@ -37,6 +38,14 @@ public struct DecisionEngine: Sendable {
             return exoPM.decide(snapshot: snapshot, preset: preset, spec: spec)
         case .leveling:
             return leveling.decide(snapshot: snapshot, preset: preset, spec: spec)
+        case .exoDoSort1:
+            return ExoPercentStrategy(variant: .doSort(percent: 1)).decide(snapshot: snapshot, preset: preset, spec: spec)
+        case .exoDoSort2:
+            return ExoPercentStrategy(variant: .doSort(percent: 2)).decide(snapshot: snapshot, preset: preset, spec: spec)
+        case .exoDoDistance1:
+            return ExoPercentStrategy(variant: .doDistance(percent: 1)).decide(snapshot: snapshot, preset: preset, spec: spec)
+        case .exoDoDistance2:
+            return ExoPercentStrategy(variant: .doDistance(percent: 2)).decide(snapshot: snapshot, preset: preset, spec: spec)
         }
     }
 }

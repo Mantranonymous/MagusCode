@@ -42,3 +42,15 @@ credentials.*
 # Core ML models (large)
 *.mlmodelc/
 *.mlpackage/
+
+# Node (Frida helper)
+node_modules/
+
+# .NET (MagusWin)
+bin/
+obj/
+*.user
+
+# Python
+__pycache__/
+*.pyc

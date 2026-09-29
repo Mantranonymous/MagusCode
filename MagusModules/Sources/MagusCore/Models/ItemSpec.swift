@@ -58,6 +58,18 @@ public struct StatSpec: Hashable, Codable, Sendable {
     /// Largeur de la range (utile pour pondérer la difficulté).
     public var rangeSpan: Int { maxValue - minValue }
 
-    /// Vrai si la stat a un range pertinent (les stats triviales comme PA/PM 1/1 ne sont pas vraiment mageables).
-    public var isMageable: Bool { maxValue > minValue }
+    /// Vrai si la stat est "over-able" — il vaut la peine de tenter un over
+    /// (ex: Portée 1→2 sur un anneau, Invocation 1→2).
+    public var isOverable: Bool {
+        // Portée (19) et Invocations (156 selon DofusDB) — over de 1 rentable.
+        [19, 156].contains(kind.characteristicId)
+    }
+
+    /// Toute stat existante sur l'item est mageable : même les "fixes" peuvent
+    /// tomber pendant le maging (SN qui les drop), et il faut alors les remettre
+    /// à leur valeur initiale via une rune.
+    public var isMageable: Bool { true }
+
+    /// Vrai si la stat a un range avec variance (jet mageable au sens classique).
+    public var hasVariableRange: Bool { maxValue > minValue }
 }

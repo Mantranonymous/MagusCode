@@ -1,0 +1,61 @@
+# .NET / Visual Studio
+bin/
+obj/
+out/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artefacts
+*.dll
+*.pdb
+*.exe
+*.cache
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+*.xml
+
+# Rider
+*.sln.iml
+.idea_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Local secrets / config
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+*.local.json
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Packages
+*.nupkg
+*.snupkg
+packages/
+
+# Reverse engineering artefacts (dumps, captures)
+re/dumps/
+re/captures/
+*.pcap
+*.pcapng
+GameAssembly.dll
+global-metadata.dat
+*.il2cpp

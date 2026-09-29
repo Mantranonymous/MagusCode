@@ -1,0 +1,107 @@
+{
+  "_originalFile": "Anneau de Padgref.efitem",
+  "_source": "efitem_conversion",
+  "config": {
+    "alternateExoPAPM": false,
+    "createdAt": "2026-05-20T12:41:38.368024+00:00",
+    "defaultRule": {
+      "maxCanHit": 9999,
+      "paValueThreshold": {
+        "always": {}
+      },
+      "raValueThreshold": {
+        "always": {}
+      },
+      "thresholdPA": 20,
+      "thresholdRA": 60,
+      "useBase": true,
+      "usePA": true,
+      "useRA": true
+    },
+    "id": "3331D90C-617F-4825-9646-E99315AF9A91",
+    "name": "Rapide (règle ×20)",
+    "rules": {},
+    "updatedAt": "2026-05-20T12:41:38.368024+00:00"
+  },
+  "exportedAt": "2026-05-20T12:41:38.368024+00:00",
+  "format": "magus.preset",
+  "stats": {
+    "_parsedItemName": "Anneau Chevelu",
+    "_targetsList": [
+      {
+        "characteristicId": 10,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 48
+      },
+      {
+        "characteristicId": 11,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 194
+      },
+      {
+        "characteristicId": 12,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 20
+      },
+      {
+        "characteristicId": 16,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 4
+      },
+      {
+        "characteristicId": 33,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 10
+      },
+      {
+        "characteristicId": 37,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 10
+      },
+      {
+        "characteristicId": 54,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 7
+      },
+      {
+        "characteristicId": 55,
+        "enabled": true,
+        "minimum": null,
+        "priority": 100,
+        "target": 7
+      }
+    ],
+    "createdAt": "2026-05-20T12:41:38.368024+00:00",
+    "id": "AB9F5DEC-25D8-42FC-B7AC-766E7CA9A73F",
+    "itemSpecId": null,
+    "name": "Importé ExoFast — Anneau Chevelu",
+    "scenario": "jetParfait",
+    "steps": [],
+    "targetsRaw": {
+      "10": 48,
+      "11": 194,
+      "12": 20,
+      "16": 4,
+      "33": 10,
+      "37": 10,
+      "54": 7,
+      "55": 7
+    },
+    "updatedAt": "2026-05-20T12:41:38.368024+00:00"
+  },
+  "version": 1
+}

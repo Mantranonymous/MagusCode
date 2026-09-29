@@ -1,3 +1,4 @@
+import MagusCommon
 import MagusCore
 import MagusDecision
 import MagusPersistence
@@ -8,9 +9,9 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var appState = AppState()
-    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "magus.onboardingDone")
 
     var body: some View {
+        @Bindable var bindable = appState
         Group {
             switch appState.mode {
             case .home:
@@ -22,9 +23,36 @@ struct ContentView: View {
         .frame(minWidth: 1100, minHeight: 700)
         .background(Theme.Colors.bg)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showOnboarding) {
-            OnboardingSheet(appState: appState, isPresented: $showOnboarding)
+        .overlay(alignment: .top) {
+            if let msg = appState.toastMessage {
+                toastBanner(message: msg, isError: appState.toastIsError)
+                    .padding(.top, Theme.Spacing.xl)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: appState.toastMessage)
+        .sheet(isPresented: $bindable.showOnboarding) {
+            OnboardingSheet(appState: appState, isPresented: $bindable.showOnboarding)
+        }
+    }
+
+    private func toastBanner(message: String, isError: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(isError ? Theme.Colors.danger : Theme.Colors.success)
+            Text(message)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .background(Theme.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.md)
+                .stroke((isError ? Theme.Colors.danger : Theme.Colors.success).opacity(0.4), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
     }
 }
 
@@ -271,6 +299,15 @@ private struct HomeView: View {
 
                 Card(title: "Presets sauvegardés") {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        HStack {
+                            Spacer()
+                            MagusButton("Importer JSON", icon: "square.and.arrow.down", style: .ghost) {
+                                appState.importPreset()
+                            }
+                            MagusButton("Importer .efitem", icon: "square.and.arrow.down.on.square", style: .ghost) {
+                                appState.importEfitem()
+                            }
+                        }
                         if appState.savedPresets.isEmpty {
                             Text("Aucun preset sauvegardé. Va sur Activité, choisis un item + un scénario, puis clique « Sauvegarder » pour le mettre ici.")
                                 .font(.system(size: 12))
@@ -303,6 +340,7 @@ private struct HomeView: View {
 
                 permissionsCard
                 referenceCard
+                preferencesCard
 
                 Card(title: "Diagnostics") {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -338,6 +376,19 @@ private struct HomeView: View {
                     permission: .accessibility,
                     status: appState.permissions.accessibility
                 )
+
+                if !appState.permissions.allGranted {
+                    HStack {
+                        Text("Si tu viens de cocher dans Réglages, clique ici (macOS ne propage pas en live).")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        Spacer()
+                        MagusButton("Re-vérifier", icon: "arrow.clockwise", style: .ghost) {
+                            appState.retryPermissions()
+                        }
+                    }
+                    .padding(.top, Theme.Spacing.xs)
+                }
             }
         }
     }
@@ -405,6 +456,10 @@ private struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var preferencesCard: some View {
+        PreferencesCard(appState: appState)
     }
 
     private var refDotState: StatusDot.State {
@@ -690,19 +745,16 @@ private struct HomeView: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                             .textCase(.uppercase)
                         if appState.isSessionActive {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(Theme.Colors.success)
-                                    .frame(width: 6, height: 6)
-                                Text("Session active · \(String(format: "%.1f", appState.sessionFps)) fps")
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(Theme.Colors.success)
-                            }
+                            sessionLiveStats
                         }
                         Spacer()
                         sessionButtons
                     }
                     automationControls
+
+                    if let preset = appState.currentStatsPreset, preset.isMultiStep {
+                        stepProgressRow(preset: preset)
+                    }
 
                     actionPrimaryRow(decision: decision)
 
@@ -710,6 +762,16 @@ private struct HomeView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let probas = appState.currentProbabilities {
+                        probabilityRow(probas: probas)
+                    }
+                    if !appState.currentRiskDrops.isEmpty {
+                        riskDropsRow(drops: appState.currentRiskDrops)
+                    }
+                    if !appState.depletedRunes.isEmpty {
+                        depletedRunesRow
+                    }
                 }
                 .padding(Theme.Spacing.xl)
             }
@@ -787,6 +849,122 @@ private struct HomeView: View {
         }
     }
 
+    private func stepProgressRow(preset: StatsPreset) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "list.number")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.Colors.accent)
+            let name = preset.stepName(at: appState.currentStepIndex) ?? "Étape \(appState.currentStepIndex + 1)"
+            Text("Étape \(appState.currentStepIndex + 1)/\(preset.stepCount) · \(name)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Spacer()
+            if appState.currentStepIndex < preset.stepCount - 1 {
+                MagusButton("Passer", icon: "forward", style: .ghost) {
+                    appState.skipCurrentStep()
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.sm)
+        .padding(.vertical, 6)
+        .background(Theme.Colors.accent.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+    }
+
+    private var sessionLiveStats: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Circle().fill(Theme.Colors.success).frame(width: 6, height: 6)
+            Text("\(appState.sessionCombineCount) combines")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Theme.Colors.textSecondary)
+            scLabel(count: appState.sessionScCount, color: Theme.Colors.success, label: "SC")
+            scLabel(count: appState.sessionSnCount, color: Theme.Colors.warning, label: "SN")
+            scLabel(count: appState.sessionEcCount, color: Theme.Colors.danger, label: "EC")
+            if let rem = appState.estimatedMinutesRemaining {
+                Text("· ~\(rem) min restantes")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+        }
+    }
+
+    private func scLabel(count: Int, color: Color, label: String) -> some View {
+        HStack(spacing: 2) {
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+    }
+
+    private func probabilityRow(probas: SuccessProbabilityModel.Probabilities) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            probaBlock(pct: probas.sc, label: "SC", color: Theme.Colors.success)
+            probaBlock(pct: probas.sn, label: "SN", color: Theme.Colors.warning)
+            probaBlock(pct: probas.ec, label: "EC", color: Theme.Colors.danger)
+            Spacer()
+        }
+        .padding(Theme.Spacing.sm)
+        .background(Theme.Colors.surfaceElev)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+    }
+
+    private func probaBlock(pct: Double, label: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Text("\(Int((pct * 100).rounded()))%")
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+    }
+
+    private func riskDropsRow(drops: [RiskSimulator.PredictedDrop]) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.Colors.warning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Si échec, chutes probables :")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                let text = drops.map { d in
+                    "\(appState.displayName(for: d.kind)) −\(d.estimatedPointsLost) (\(Int((d.probability * 100).rounded()))%)"
+                }.joined(separator: ", ")
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Colors.warning)
+            }
+        }
+    }
+
+    private var depletedRunesRow: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "nosign")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.Colors.danger)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Runes épuisées (\(appState.depletedRunes.count)) :")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                let names = appState.depletedRunes.map { rune in
+                    let prefix = rune.power.prefix.isEmpty ? "" : "\(rune.power.prefix) "
+                    return "\(prefix)\(appState.displayName(for: rune.kind))"
+                }.sorted().joined(separator: ", ")
+                Text(names)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Colors.danger)
+            }
+            Spacer()
+            MagusButton("Réinitialiser", style: .ghost) {
+                appState.resetDepletedRunes()
+            }
+        }
+    }
+
     private func runeName(rune: Rune, kind: StatKind) -> String {
         let statName = appState.displayName(for: kind)
         let prefix = rune.power.prefix
@@ -845,9 +1023,20 @@ private struct HomeView: View {
                 if let item = appState.selectedItem {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Theme.Colors.textPrimary)
+                            HStack(spacing: Theme.Spacing.sm) {
+                                Text(item.name)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                if let preset = appState.currentStatsPreset {
+                                    Text("PRESET ACTIF · \(preset.name)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(Theme.Colors.success)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Theme.Colors.success.opacity(0.15))
+                                        .clipShape(Capsule())
+                                }
+                            }
                             Text("Niveau \(item.level)" + (item.typeName.map { " · \($0)" } ?? "") + (item.metier.map { " · \($0.displayName)" } ?? ""))
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -861,21 +1050,61 @@ private struct HomeView: View {
                         }
                     }
 
-                    // Sélecteur de scénario
+                    // Sélecteur de scénario via Menu (9+ scénarios, le HStack pills overflow)
                     Divider().background(Theme.Colors.border)
                     HStack(spacing: Theme.Spacing.sm) {
                         Text("Scénario")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Theme.Colors.textTertiary)
                             .textCase(.uppercase)
-                        HStack(spacing: 0) {
+                        Menu {
                             ForEach(PresetScenario.allCases, id: \.self) { scenario in
-                                scenarioPill(scenario)
+                                Button {
+                                    appState.setScenario(scenario)
+                                } label: {
+                                    if appState.currentScenario == scenario {
+                                        Label(scenario.displayName, systemImage: "checkmark")
+                                    } else {
+                                        Text(scenario.displayName)
+                                    }
+                                }
                             }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: scenarioIcon(appState.currentScenario))
+                                    .font(.system(size: 11))
+                                Text(appState.currentScenario.displayName)
+                                    .font(.system(size: 12, weight: .semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 9))
+                            }
+                            .foregroundStyle(Theme.Colors.accent)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.vertical, 6)
+                            .background(Theme.Colors.accent.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                         }
-                        .background(Theme.Colors.surfaceElev)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        // Toggle alternance PA/PM si scenario exo
+                        if appState.currentScenario == .exoPA || appState.currentScenario == .exoPM {
+                            Toggle(isOn: Binding(
+                                get: { appState.currentConfigPreset.alternateExoPAPM },
+                                set: { appState.currentConfigPreset.alternateExoPAPM = $0 }
+                            )) {
+                                Text("Alterner PA↔PM")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        }
                         Spacer()
+                        MagusButton("Remplir depuis l'item", icon: "arrow.down.doc", style: .ghost,
+                                    isDisabled: appState.lastParsedSnapshot?.item == nil) {
+                            appState.fillPresetFromCurrentItem()
+                        }
                         MagusButton("Éditer", icon: "slider.horizontal.3", style: .ghost,
                                     isDisabled: appState.currentStatsPreset == nil) {
                             showPresetEditor = true
@@ -883,33 +1112,34 @@ private struct HomeView: View {
                         MagusButton("Sauvegarder", icon: "square.and.arrow.down", style: .secondary) {
                             appState.saveCurrentPreset()
                         }
+                        MagusButton("Exporter", icon: "square.and.arrow.up", style: .ghost,
+                                    isDisabled: appState.currentStatsPreset == nil) {
+                            appState.exportCurrentPreset()
+                        }
                     }
 
                     Divider().background(Theme.Colors.border)
 
-                    let mageable = item.stats.filter(\.isMageable)
-                    let fixed = item.stats.filter { !$0.isMageable }
-
-                    if !mageable.isEmpty {
-                        Text("Stats mageables")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                        ForEach(mageable, id: \.kind) { spec in
-                            itemSpecStatRow(spec: spec, isFixed: false)
-                        }
+                    // Toutes les stats sont mageables : même une stat "1-1" peut tomber
+                    // pendant le maging et doit être remontée. On les affiche toutes dans
+                    // une seule liste, triées : variables d'abord puis fixes/overables.
+                    let sortedStats = item.stats.sorted { a, b in
+                        if a.hasVariableRange != b.hasVariableRange { return a.hasVariableRange }
+                        return a.order < b.order
                     }
-
-                    if !fixed.isEmpty {
-                        Divider().background(Theme.Colors.border)
-                        Text("Stats fixes (non mageables)")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                        ForEach(fixed, id: \.kind) { spec in
-                            itemSpecStatRow(spec: spec, isFixed: true)
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Stats de l'item (\(sortedStats.count))")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                                .textCase(.uppercase)
+                            ForEach(sortedStats, id: \.kind) { spec in
+                                itemSpecStatRow(spec: spec, isFixed: !spec.hasVariableRange)
+                            }
                         }
+                        .padding(.vertical, Theme.Spacing.xs)
                     }
+                    .frame(maxHeight: 380)
                 } else {
                     HStack {
                         Text("Aucun item sélectionné. Choisis l'item posé sur l'établi pour activer la stratégie DofusDB.")
@@ -954,54 +1184,20 @@ private struct HomeView: View {
         }
     }
 
-    private func scenarioPill(_ scenario: PresetScenario) -> some View {
-        let isSelected = appState.currentScenario == scenario
-        return Button {
-            appState.setScenario(scenario)
-        } label: {
-            Text(scenario.shortName)
-                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(isSelected ? Theme.Colors.accent : Color.clear)
-                .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
+    private func scenarioIcon(_ scenario: PresetScenario) -> String {
+        switch scenario {
+        case .jetParfait: return "checkmark.seal"
+        case .exoPA: return "1.circle"
+        case .exoPM: return "2.circle"
+        case .exoDoSort1, .exoDoSort2: return "sparkles"
+        case .exoDoDistance1, .exoDoDistance2: return "scope"
+        case .overVita: return "heart.fill"
+        case .leveling: return "arrow.up.right"
         }
-        .buttonStyle(.plain)
     }
 
     private func itemSpecStatRow(spec: StatSpec, isFixed: Bool) -> some View {
-        let currentValue: Int? = appState.lastParsedSnapshot?.item?.stat(matching: spec.kind)?.value
-        let displayName = appState.displayName(for: spec.kind)
-        let primaryColor = isFixed ? Theme.Colors.textSecondary : Theme.Colors.textPrimary
-
-        return HStack(spacing: Theme.Spacing.md) {
-            Text(displayName)
-                .font(.system(size: 12, weight: isFixed ? .regular : .medium))
-                .foregroundStyle(primaryColor)
-                .frame(width: 200, alignment: .leading)
-
-            if let v = currentValue {
-                let atMax = v >= spec.maxValue
-                Text("\(v)")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundStyle(atMax ? Theme.Colors.gold : (isFixed ? Theme.Colors.textSecondary : Theme.Colors.accent))
-                    .frame(width: 50, alignment: .trailing)
-            } else {
-                Text("—")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 50, alignment: .trailing)
-            }
-
-            Text(isFixed ? "(fixe \(spec.minValue))" : "(\(spec.minValue) - \(spec.maxValue))")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .frame(width: 90, alignment: .leading)
-
-            Spacer()
-        }
-        .padding(.vertical, 2)
-        .opacity(isFixed ? 0.75 : 1.0)
+        StatRowEditable(spec: spec, isFixed: isFixed, appState: appState)
     }
 
     private func ocrTestCard(profile: ResolutionProfile) -> some View {
@@ -1391,6 +1587,612 @@ private struct Card<Content: View>: View {
             RoundedRectangle(cornerRadius: Theme.Radius.lg)
                 .stroke(Theme.Colors.border, lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Stat Row Editable
+
+private struct StatRowEditable: View {
+    let spec: StatSpec
+    let isFixed: Bool
+    let appState: AppState
+    @State private var targetInput: String = ""
+    @State private var minInput: String = ""
+    @State private var isExpanded: Bool = false
+    @FocusState private var focusedField: Field?
+
+    enum Field { case target, minimum }
+
+    var body: some View {
+        let currentValue = appState.lastParsedSnapshot?.item?.stat(matching: spec.kind)?.value
+        let displayName = appState.displayName(for: spec.kind)
+        let currentTarget = appState.currentStatsPreset?.targets[spec.kind]
+        let isEnabled = currentTarget?.enabled ?? false
+        let target = currentTarget?.target ?? spec.maxValue
+        let priority = currentTarget?.priority ?? 100
+        let progressColor = progressColor(value: currentValue, target: target)
+
+        VStack(alignment: .leading, spacing: 6) {
+            // Ligne principale compacte
+            HStack(spacing: Theme.Spacing.md) {
+                // Toggle pill stylé
+                Button(action: { appState.toggleEnabled(for: spec.kind) }) {
+                    Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(isEnabled ? Theme.Colors.accent : Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+
+                // Nom + sous-ligne range
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(displayName)
+                        .font(.system(size: 12, weight: isEnabled ? .semibold : .regular))
+                        .foregroundStyle(isEnabled ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
+                    Text("range \(spec.minValue)–\(spec.maxValue)")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .frame(width: 160, alignment: .leading)
+
+                // Valeur courante / cible avec barre de progression compacte
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        if let v = currentValue {
+                            Text("\(v)")
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundStyle(v >= target ? Theme.Colors.success : progressColor)
+                        } else {
+                            Text("—").font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                        Text("/")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        TextField("0", text: $targetInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(isEnabled ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 36)
+                            .padding(.vertical, 2)
+                            .background(Theme.Colors.surfaceElev)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .focused($focusedField, equals: .target)
+                            .onSubmit { commitTarget() }
+                    }
+                    // Barre de progression
+                    progressBar(value: currentValue, target: target, color: progressColor)
+                        .frame(width: 110, height: 3)
+                }
+
+                // Badge priorité (cliquable pour expand)
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 9))
+                        Text("\(priority)")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundStyle(priorityColor(priority))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(priorityColor(priority).opacity(0.15))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Indicateur expand
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }
+            }
+
+            // Section dépliable : Min + Priority + actions rapides
+            if isExpanded {
+                HStack(spacing: Theme.Spacing.md) {
+                    // Min input
+                    HStack(spacing: 4) {
+                        Text("Min")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        TextField("auto", text: $minInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11, design: .monospaced))
+                            .multilineTextAlignment(.center)
+                            .frame(width: 40)
+                            .padding(.vertical, 2)
+                            .background(Theme.Colors.surfaceElev)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .focused($focusedField, equals: .minimum)
+                            .onSubmit { commitMin() }
+                    }
+                    // Slider priorité
+                    HStack(spacing: 4) {
+                        Text("Priorité")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        Slider(value: Binding(
+                            get: { Double(priority) },
+                            set: { appState.updateStat(for: spec.kind, priority: Int($0)) }
+                        ), in: 0...150, step: 10)
+                        .frame(width: 100)
+                        Text("\(priority)")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(priorityColor(priority))
+                            .frame(width: 24, alignment: .trailing)
+                    }
+                    Spacer()
+                    // Actions rapides
+                    Button("Max") {
+                        appState.updateStat(for: spec.kind, target: spec.maxValue)
+                        targetInput = String(spec.maxValue)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.accent)
+                    Button("Min") {
+                        appState.updateStat(for: spec.kind, target: spec.minValue)
+                        targetInput = String(spec.minValue)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                .padding(.leading, 28)
+                .padding(.vertical, 4)
+                .background(Theme.Colors.surfaceElev.opacity(0.4))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, Theme.Spacing.xs)
+        .background(isEnabled ? Color.clear : Theme.Colors.surfaceElev.opacity(0.2))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+        .opacity(isFixed && !isEnabled ? 0.5 : 1.0)
+        .onAppear {
+            targetInput = String(target)
+            minInput = currentTarget?.minimum.map(String.init) ?? ""
+        }
+        // Re-sync les champs si le preset change depuis l'extérieur (import .efitem,
+        // changement de scénario, etc.) — sinon les TextField gardent leur ancien texte.
+        .onChange(of: target) { _, newValue in
+            if !targetIsFocused { targetInput = String(newValue) }
+        }
+        // Commit LIVE sur chaque frappe : le bot tourne en continu, l'utilisateur
+        // ne doit pas avoir à press Enter pour que sa nouvelle cible soit prise en compte.
+        .onChange(of: targetInput) { _, _ in commitTarget() }
+        .onChange(of: minInput) { _, _ in commitMin() }
+        .onChange(of: focusedField) { _, newFocus in
+            if newFocus != .target { commitTarget() }
+            if newFocus != .minimum { commitMin() }
+        }
+    }
+
+    private var targetIsFocused: Bool { focusedField == .target }
+
+    private func commitTarget() {
+        guard let n = Int(targetInput), n >= 0 else { return }
+        // Évite la boucle d'update si la valeur est déjà à jour
+        if appState.currentStatsPreset?.targets[spec.kind]?.target == n { return }
+        appState.updateStat(for: spec.kind, target: n)
+    }
+
+    private func commitMin() {
+        if minInput.isEmpty {
+            if appState.currentStatsPreset?.targets[spec.kind]?.minimum != nil {
+                appState.updateStat(for: spec.kind, minimum: .some(nil))
+            }
+        } else if let n = Int(minInput) {
+            if appState.currentStatsPreset?.targets[spec.kind]?.minimum != n {
+                appState.updateStat(for: spec.kind, minimum: .some(n))
+            }
+        }
+    }
+
+    private func progressColor(value: Int?, target: Int) -> Color {
+        guard let v = value, target > 0 else { return Theme.Colors.textTertiary }
+        let ratio = Double(v) / Double(target)
+        if ratio >= 1.0 { return Theme.Colors.success }
+        if ratio >= 0.7 { return Theme.Colors.accent }
+        if ratio >= 0.3 { return Theme.Colors.warning }
+        return Theme.Colors.danger
+    }
+
+    private func priorityColor(_ p: Int) -> Color {
+        switch p {
+        case 120...: return Theme.Colors.danger      // PA/PM critique
+        case 100..<120: return Theme.Colors.accent   // standard
+        case 60..<100: return Theme.Colors.warning   // moyen
+        default: return Theme.Colors.textTertiary    // bas
+        }
+    }
+
+    @ViewBuilder
+    private func progressBar(value: Int?, target: Int, color: Color) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Theme.Colors.surfaceElev)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color)
+                    .frame(width: progressWidth(value: value, target: target, total: geo.size.width))
+            }
+        }
+    }
+
+    private func progressWidth(value: Int?, target: Int, total: CGFloat) -> CGFloat {
+        guard let v = value, target > 0 else { return 0 }
+        let ratio = min(1.0, Double(v) / Double(target))
+        return CGFloat(ratio) * total
+    }
+}
+
+// MARK: - Preferences Card
+
+private struct PreferencesCard: View {
+    let appState: AppState
+
+    var body: some View {
+        @Bindable var settings = appState.settings
+        Card(title: "Préférences") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                // VLM Fallback
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Text("Fallback VLM")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Text("expérimental")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.warning)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.Colors.warning.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                            Text("Quand Apple Vision a une confiance basse sur une zone, tenter Qwen2.5-VL (MLX) en relais. Moteur VLM non packagé pour l'instant — toggle prêt pour activation future.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.vlmFallbackEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    if settings.vlmFallbackEnabled {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            HStack {
+                                Text("Seuil de confiance")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                                Spacer()
+                                Text(String(format: "%.2f", settings.vlmConfidenceThreshold))
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(Theme.Colors.accent)
+                            }
+                            Slider(value: $settings.vlmConfidenceThreshold, in: 0.3...0.95, step: 0.05)
+                            Text("Sous ce seuil de confiance Vision, le VLM prend le relais.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                        .padding(Theme.Spacing.sm)
+                        .background(Theme.Colors.surfaceElev)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                    }
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // Click marker toggle
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Afficher le marqueur de clic")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("Cercle visuel au point du prochain clic auto/démo.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $settings.showClickMarker)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // Mode Turbo
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Text("Mode Turbo")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Text("risqué")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.danger)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.Colors.danger.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                            Text("Throttle 250ms, click toutes les 800ms, pas de pauses anti-detect, click direct sans courbe humaine. ~2-3× plus rapide.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.turboMode)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    if settings.turboMode {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.danger)
+                            Text("Détection Ankama plus probable. À réserver aux comptes jetables.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.Colors.danger)
+                        }
+                        .padding(Theme.Spacing.sm)
+                        .background(Theme.Colors.danger.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                    }
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // OCR Preprocessing
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Upscaling OCR")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("Multiplie la taille de l'image avant OCR (Lanczos). 2x = meilleur compromis perf/qualité, 3x = max qualité mais plus lent.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Text("×\(String(format: "%.1f", settings.ocrUpscaleFactor))")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                    Slider(value: $settings.ocrUpscaleFactor, in: 1.0...4.0, step: 0.5)
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Binarisation OCR")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("Convertit en N&B + contraste boosté. Utile sur les items très sombres. Peut rater du texte clair.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $settings.ocrBinarize)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // Alertes sonores
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Alertes sonores")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("Joue un son sur succès / échec / régression. Utile en arrière-plan.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $settings.soundsEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // Log level
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Niveau de log")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("Filtre des messages affichés dans Diagnostics.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Picker("", selection: $settings.logLevel) {
+                        ForEach(AppSettings.LogLevel.allCases, id: \.self) { level in
+                            Text(level.displayName).tag(level)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 120)
+                }
+
+                Divider().background(Theme.Colors.border)
+
+                // Network observation (passive)
+                NetworkObservationSection(appState: appState)
+
+                Divider().background(Theme.Colors.border)
+
+                // Actions
+                HStack(spacing: Theme.Spacing.md) {
+                    MagusButton("Rejouer l'onboarding", icon: "arrow.counterclockwise", style: .secondary) {
+                        appState.replayOnboarding()
+                    }
+                    MagusButton("Restaurer défauts", icon: "arrow.uturn.backward", style: .ghost) {
+                        appState.settings.resetToDefaults()
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+/// Section dédiée au mode observation réseau passive (`MagusNetwork`).
+/// Affiche le toggle principal + paramètres (port, path Dofus) + bouton de
+/// test + statut live (PID, connexions, paquets observés).
+private struct NetworkObservationSection: View {
+    let appState: AppState
+    @State private var isStarting = false
+    @State private var isTesting = false
+
+    var body: some View {
+        @Bindable var settings = appState.settings
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text("Observation réseau passive")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("expérimental")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.warning)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.Colors.warning.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                    Text("Décode les paquets Protobuf entre Dofus et Ankama pour reconstruire l'état exact de la session FM. Aucune injection ni forge de paquet — les actions restent simulées via clavier/souris.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { settings.networkObservationEnabled },
+                    set: { newValue in
+                        settings.networkObservationEnabled = newValue
+                        Task {
+                            if newValue {
+                                isStarting = true
+                                await appState.startNetworkObservation()
+                                isStarting = false
+                            } else {
+                                appState.stopNetworkObservation()
+                            }
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .disabled(isStarting)
+            }
+
+            if settings.networkObservationEnabled {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    HStack {
+                        Text("Port proxy local")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Spacer()
+                        TextField("7975", value: Binding(
+                            get: { Int(settings.networkProxyPort) },
+                            set: { newValue in
+                                let clamped = max(1024, min(65535, newValue))
+                                settings.networkProxyPort = UInt16(clamped)
+                            }
+                        ), format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                    }
+                    HStack {
+                        Text("Chemin Dofus")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Spacer()
+                        TextField("/Applications/.../Dofus", text: $settings.networkDofusPath)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 360)
+                    }
+
+                    HStack(spacing: Theme.Spacing.sm) {
+                        MagusButton(
+                            isTesting ? "Test…" : "Tester",
+                            icon: "wand.and.rays",
+                            style: .secondary
+                        ) {
+                            Task {
+                                isTesting = true
+                                await appState.runNetworkDiagnostic()
+                                isTesting = false
+                            }
+                        }
+                        .disabled(isTesting)
+                        Spacer()
+                        statusBadge
+                    }
+
+                    if let error = appState.networkLastError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.danger)
+                            Text(error)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.Colors.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Text("Setup : `npm install` dans Sources/MagusNetwork/Frida/ puis `./generate.sh` dans Sources/MagusNetwork/Protos/. Voir README du module.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Theme.Spacing.sm)
+                .background(Theme.Colors.surfaceElev)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+            }
+        }
+    }
+
+    private var statusBadge: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(appState.networkObserver.isObserving ? Theme.Colors.success : Theme.Colors.textTertiary)
+                .frame(width: 8, height: 8)
+            if appState.networkObserver.isObserving {
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let pid = appState.networkObserver.dofusPid {
+                        Text("PID \(pid)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    Text("\(appState.networkObserver.packetCount) paquets / \(appState.networkObserver.redirectedConnectionCount) cnx")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            } else {
+                Text("inactif")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+        }
     }
 }
 

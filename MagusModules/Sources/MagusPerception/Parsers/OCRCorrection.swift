@@ -57,9 +57,11 @@ public enum OCRCorrection {
         String(text.map { digitSubstitutions[$0] ?? $0 })
     }
 
-    /// Garde uniquement chiffres, signes, et virgules.
+    /// Garde uniquement chiffres et signes. U+2212 (MINUS SIGN) → ASCII "-".
     public static func stripNonDigits(_ text: String) -> String {
-        text.filter { $0.isNumber || $0 == "-" || $0 == "+" }
+        text
+            .replacingOccurrences(of: "\u{2212}", with: "-")
+            .filter { $0.isNumber || $0 == "-" || $0 == "+" }
     }
 
     /// Sépare d'une string un nombre potentiel (premier groupe consécutif de chiffres).
